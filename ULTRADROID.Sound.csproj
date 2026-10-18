@@ -11,6 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>lib/Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>lib/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
