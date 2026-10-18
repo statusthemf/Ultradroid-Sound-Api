@@ -25,7 +25,7 @@ namespace ULTRADROID.Sound.ExampleMod
                 Log.LogInfo("Sound API initialized.");
 
                 string audioPath =
-                    "/storage/emulated/0/Download/example.wav";
+                    "/storage/emulated/0/BepInEx_Android/com.aarongamingdev.ULTRAKILL/BepInEx/plugins/test.mp3";
 
                 SoundOptions options = new SoundOptions
                 {
