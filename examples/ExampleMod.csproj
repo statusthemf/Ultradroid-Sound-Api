@@ -22,6 +22,10 @@
       <HintPath>../lib/BepInEx.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Il2CppSystem">
+      <HintPath>lib/Il2CppSystem.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
 
     <Reference Include="BepInEx.Unity.IL2CPP">
       <HintPath>../lib/BepInEx.Unity.IL2CPP.dll</HintPath>
