@@ -21,16 +21,16 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Verify required DLL references
+      - name: Verify required DLL files
         shell: bash
         run: |
-          set -e
+          set -eu
 
           files=(
-            "lib/Il2Cppmscorlib.dll"
-            "lib/Il2CppInterop.Runtime.dll"
             "lib/BepInEx.Core.dll"
             "lib/BepInEx.Unity.IL2CPP.dll"
+            "lib/Il2CppInterop.Runtime.dll"
+            "lib/Il2Cppmscorlib.dll"
             "lib/UnityEngine.CoreModule.dll"
             "lib/UnityEngine.AudioModule.dll"
             "lib/UnityEngine.UnityWebRequestModule.dll"
@@ -38,13 +38,46 @@ jobs:
           )
 
           for file in "${files[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "::error::Missing required DLL: $file"
+            if [ ! -s "$file" ]; then
+              echo "::error::Missing or empty DLL: $file"
               exit 1
             fi
 
-            echo "Found: $file"
+            echo "Found $file ($(stat -c%s "$file") bytes)"
+            file "$file"
           done
+
+      - name: Install assembly inspection tool
+        run: dotnet tool install ilspycmd --tool-path "$RUNNER_TEMP/tools"
+
+      - name: Inspect BepInEx assembly types
+        shell: bash
+        run: |
+          set -eu
+
+          ILSPY="$RUNNER_TEMP/tools/ilspycmd"
+
+          echo "=== BepInEx.Core.dll ==="
+          "$ILSPY" -l c lib/BepInEx.Core.dll \
+            | tee "$RUNNER_TEMP/bepinex-core-types.txt"
+
+          echo "=== BepInEx.Unity.IL2CPP.dll ==="
+          "$ILSPY" -l c lib/BepInEx.Unity.IL2CPP.dll \
+            | tee "$RUNNER_TEMP/bepinex-il2cpp-types.txt"
+
+          if ! grep -q 'BepInPlugin' \
+            "$RUNNER_TEMP/bepinex-core-types.txt"; then
+            echo "::error::BepInPlugin was not found in BepInEx.Core.dll."
+            exit 1
+          fi
+
+          if ! grep -q 'BasePlugin' \
+            "$RUNNER_TEMP/bepinex-il2cpp-types.txt"; then
+            echo "::error::BasePlugin was not found in BepInEx.Unity.IL2CPP.dll."
+            exit 1
+          fi
+
+          echo "Required BepInEx types were found."
 
       - name: Build Sound API
         run: dotnet build ULTRADROID.Sound.csproj --configuration Release
@@ -55,6 +88,7 @@ jobs:
       - name: Verify compiled DLLs
         shell: bash
         run: |
+          set -eu
           test -f bin/Release/netstandard2.1/ULTRADROID.Sound.dll
           test -f examples/bin/Release/netstandard2.1/ULTRADROID.SoundTest.dll
 
