@@ -9,7 +9,7 @@ namespace ULTRADROID.Sound.ExampleMod
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.3"
+        "1.0.4"
     )]
     public sealed class ExampleMod : BasePlugin
     {
@@ -17,11 +17,19 @@ namespace ULTRADROID.Sound.ExampleMod
 
         public override void Load()
         {
-            Log.LogInfo("Sound Test 1.0.3 loaded.");
+            Log.LogInfo("Sound Test 1.0.4 loaded.");
 
             try
             {
+                SoundAPI.SetLogger(
+                    message => Log.LogInfo(message),
+                    message => Log.LogError(message)
+                );
+
+                Log.LogInfo("Sound API logger connected.");
+
                 SoundAPI.Initialize();
+
                 Log.LogInfo("Sound API initialized.");
 
                 string audioPath =
