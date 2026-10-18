@@ -17,6 +17,11 @@
       <Private>false</Private>
     </Reference>
 
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>../lib/Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="BepInEx.Core">
       <HintPath>../lib/BepInEx.Core.dll</HintPath>
       <Private>false</Private>
