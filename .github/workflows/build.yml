@@ -24,24 +24,27 @@ jobs:
       - name: Verify required DLL references
         shell: bash
         run: |
-          missing=0
+          set -e
 
-          for f in \
-            lib/Il2Cppmscorlib.dll \
-            lib/UnityEngine.CoreModule.dll \
-            lib/UnityEngine.AudioModule.dll \
-            lib/UnityEngine.UnityWebRequestModule.dll \
-            lib/UnityEngine.UnityWebRequestAudioModule.dll \
-            lib/BepInEx.Core.dll \
-            lib/BepInEx.Unity.IL2CPP.dll
-          do
-            if [ ! -f "$f" ]; then
-              echo "::error::Missing reference: $f"
-              missing=1
+          files=(
+            "lib/Il2Cppmscorlib.dll"
+            "lib/Il2CppInterop.Runtime.dll"
+            "lib/BepInEx.Core.dll"
+            "lib/BepInEx.Unity.IL2CPP.dll"
+            "lib/UnityEngine.CoreModule.dll"
+            "lib/UnityEngine.AudioModule.dll"
+            "lib/UnityEngine.UnityWebRequestModule.dll"
+            "lib/UnityEngine.UnityWebRequestAudioModule.dll"
+          )
+
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing required DLL: $file"
+              exit 1
             fi
-          done
 
-          exit $missing
+            echo "Found: $file"
+          done
 
       - name: Build Sound API
         run: dotnet build ULTRADROID.Sound.csproj --configuration Release
@@ -49,8 +52,13 @@ jobs:
       - name: Build Sound Test Mod
         run: dotnet build examples/ExampleMod.csproj --configuration Release
 
+      - name: Verify compiled DLLs
+        shell: bash
+        run: |
+          test -f bin/Release/netstandard2.1/ULTRADROID.Sound.dll
+          test -f examples/bin/Release/netstandard2.1/ULTRADROID.SoundTest.dll
+
       - name: Upload compiled DLLs
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ULTRADROID-Sound-Test
