@@ -1,5 +1,6 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -12,16 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="../ULTRADROID.Sound.csproj" />
 
-    <Reference Include="Il2Cppmscorlib">
-      <HintPath>../lib/Il2Cppmscorlib.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
-    <Reference Include="Il2CppInterop.Runtime">
-      <HintPath>../lib/Il2CppInterop.Runtime.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-
     <Reference Include="BepInEx.Core">
       <HintPath>../lib/BepInEx.Core.dll</HintPath>
       <Private>false</Private>
@@ -32,9 +23,20 @@
       <Private>false</Private>
     </Reference>
 
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>../lib/Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>../lib/Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>../lib/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
 </Project>
