@@ -53,7 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../src/ULTRADROID.Sound/ULTRADROID.Sound.csproj" />
+    <ProjectReference Include="../ULTRADROID.Sound.csproj" />
   </ItemGroup>
 
 </Project>
