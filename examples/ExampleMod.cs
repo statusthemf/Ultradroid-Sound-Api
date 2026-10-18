@@ -1,22 +1,34 @@
 
 using System;
 using ULTRADROID.Sound;
-using UnityEngine;
+using BepInEx;
+using BepInEx.Unity.IL2CPP;
 
 namespace ULTRADROID.Sound.ExampleMod
 {
-    public sealed class ExampleMod : MonoBehaviour
+    [BepInPlugin(
+        "com.statusthemf.ultradroid.soundtest",
+        "ULTRADROID Sound Test",
+        "1.0.0"
+    )]
+    public sealed class ExampleMod : BasePlugin
     {
         private SoundHandle currentSound;
 
-        private void Start()
+        public override void Load()
         {
+            Log.LogInfo("ULTRADROID Sound Test loaded.");
+
             SoundAPI.Initialize();
 
-            Debug.Log("[ULTRADROID Sound Example] Initialized.");
+            Log.LogInfo(
+                "Sound API initialized. Use the PlaySound command " +
+                "or call PlayTestSound() from your test code."
+            );
+        }
 
-            // Replace this with the real path to an audio file
-            // on your Android device.
+        public void PlayTestSound()
+        {
             string audioPath =
                 "/storage/emulated/0/Download/example.wav";
 
@@ -33,6 +45,8 @@ namespace ULTRADROID.Sound.ExampleMod
                 options,
                 OnSoundLoaded
             );
+
+            Log.LogInfo("Requested test sound playback.");
         }
 
         private void OnSoundLoaded(
@@ -41,43 +55,45 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             if (!string.IsNullOrEmpty(error))
             {
-                Debug.LogError(
-                    "[ULTRADROID Sound Example] " + error
-                );
+                Log.LogError("Sound loading failed: " + error);
                 return;
             }
 
             if (handle == null)
             {
-                Debug.LogError(
-                    "[ULTRADROID Sound Example] No sound handle returned."
-                );
+                Log.LogError("Sound loading returned no handle.");
                 return;
             }
 
             currentSound = handle;
-
-            Debug.Log(
-                "[ULTRADROID Sound Example] Sound loaded successfully."
-            );
+            Log.LogInfo("Test sound loaded and playback requested.");
         }
 
-        public void StopSound()
+        public void StopTestSound()
         {
             if (currentSound != null)
+            {
                 currentSound.Stop();
+                Log.LogInfo("Test sound stopped.");
+            }
         }
 
-        public void PauseSound()
+        public void PauseTestSound()
         {
             if (currentSound != null)
+            {
                 currentSound.Pause();
+                Log.LogInfo("Test sound paused.");
+            }
         }
 
-        public void ResumeSound()
+        public void ResumeTestSound()
         {
             if (currentSound != null)
+            {
                 currentSound.Resume();
+                Log.LogInfo("Test sound resumed.");
+            }
         }
     }
 }
