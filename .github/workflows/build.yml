@@ -29,6 +29,7 @@ jobs:
           files=(
             "lib/BepInEx.Core.dll"
             "lib/BepInEx.Unity.IL2CPP.dll"
+            "lib/Il2CppSystem.dll"
             "lib/Il2CppInterop.Runtime.dll"
             "lib/Il2Cppmscorlib.dll"
             "lib/UnityEngine.CoreModule.dll"
