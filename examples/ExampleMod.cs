@@ -1,98 +1,40 @@
-
 using System;
-using ULTRADROID.Sound;
 using BepInEx;
 using BepInEx.Unity.IL2CPP;
+using ULTRADROID.Sound;
 
 namespace ULTRADROID.Sound.ExampleMod
 {
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.0"
+        "1.0.1"
     )]
     public sealed class ExampleMod : BasePlugin
     {
-        private SoundHandle currentSound;
-
         public override void Load()
         {
-            Log.LogInfo("ULTRADROID Sound Test loaded.");
-
-            SoundAPI.Initialize();
+            Log.LogInfo(
+                "Sound Test plugin loaded."
+            );
 
             Log.LogInfo(
-                "Sound API initialized. Use the PlaySound command " +
-                "or call PlayTestSound() from your test code."
-            );
-        }
-
-        public void PlayTestSound()
-        {
-            string audioPath =
-                "/storage/emulated/0/Download/example.wav";
-
-            SoundOptions options = new SoundOptions
-            {
-                Volume = 1f,
-                Pitch = 1f,
-                Loop = false,
-                PlayOnLoad = true
-            };
-
-            SoundAPI.LoadAndPlay(
-                audioPath,
-                options,
-                OnSoundLoaded
+                "Testing SoundAPI initialization..."
             );
 
-            Log.LogInfo("Requested test sound playback.");
-        }
-
-        private void OnSoundLoaded(
-            SoundHandle handle,
-            string error)
-        {
-            if (!string.IsNullOrEmpty(error))
+            try
             {
-                Log.LogError("Sound loading failed: " + error);
-                return;
+                SoundAPI.Initialize();
+
+                Log.LogInfo(
+                    "SoundAPI.Initialize() completed successfully."
+                );
             }
-
-            if (handle == null)
+            catch (Exception e)
             {
-                Log.LogError("Sound loading returned no handle.");
-                return;
-            }
-
-            currentSound = handle;
-            Log.LogInfo("Test sound loaded and playback requested.");
-        }
-
-        public void StopTestSound()
-        {
-            if (currentSound != null)
-            {
-                currentSound.Stop();
-                Log.LogInfo("Test sound stopped.");
-            }
-        }
-
-        public void PauseTestSound()
-        {
-            if (currentSound != null)
-            {
-                currentSound.Pause();
-                Log.LogInfo("Test sound paused.");
-            }
-        }
-
-        public void ResumeTestSound()
-        {
-            if (currentSound != null)
-            {
-                currentSound.Resume();
-                Log.LogInfo("Test sound resumed.");
+                Log.LogError(
+                    "SoundAPI initialization failed: " + e
+                );
             }
         }
     }
