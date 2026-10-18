@@ -9,7 +9,7 @@ namespace ULTRADROID.Sound.ExampleMod
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.2"
+        "1.0.3"
     )]
     public sealed class ExampleMod : BasePlugin
     {
@@ -17,7 +17,7 @@ namespace ULTRADROID.Sound.ExampleMod
 
         public override void Load()
         {
-            Log.LogInfo("Sound Test 1.0.2 loaded.");
+            Log.LogInfo("Sound Test 1.0.3 loaded.");
 
             try
             {
