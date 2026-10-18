@@ -16,6 +16,11 @@
       <Private>false</Private>
     </Reference>
 
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>lib/Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>lib/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
