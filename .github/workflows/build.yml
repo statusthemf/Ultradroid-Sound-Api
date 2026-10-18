@@ -27,6 +27,7 @@ jobs:
           missing=0
 
           for f in \
+            lib/Il2Cppmscorlib.dll \
             lib/UnityEngine.CoreModule.dll \
             lib/UnityEngine.AudioModule.dll \
             lib/UnityEngine.UnityWebRequestModule.dll \
@@ -49,6 +50,7 @@ jobs:
         run: dotnet build examples/ExampleMod.csproj --configuration Release
 
       - name: Upload compiled DLLs
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ULTRADROID-Sound-Test
