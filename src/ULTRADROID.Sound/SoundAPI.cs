@@ -1,3 +1,4 @@
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,12 +13,21 @@ namespace ULTRADROID.Sound
         private static SoundRuntime runtime;
         private static bool runtimeTypeRegistered;
 
+        private sealed class PendingLoad
+        {
+            public UnityWebRequest Request;
+            public SoundOptions Options;
+            public Action<SoundHandle, string> Callback;
+        }
+
+        private static readonly List<PendingLoad> pending =
+            new List<PendingLoad>();
+
         public static void Initialize()
         {
             if (runtime != null)
                 return;
 
-            // Register the custom MonoBehaviour before AddComponent.
             if (!runtimeTypeRegistered)
             {
                 ClassInjector.RegisterTypeInIl2Cpp<SoundRuntime>();
@@ -28,10 +38,10 @@ namespace ULTRADROID.Sound
                 "ULTRADROID.SoundRuntime"
             );
 
-            UnityEngine.Object.DontDestroyOnLoad(obj);
-
             try
             {
+                UnityEngine.Object.DontDestroyOnLoad(obj);
+
                 runtime = obj.AddComponent<SoundRuntime>();
 
                 if (runtime == null)
@@ -51,8 +61,7 @@ namespace ULTRADROID.Sound
                 runtime = null;
 
                 Debug.LogError(
-                    "[ULTRADROID Sound] Runtime initialization failed: "
-                    + e
+                    "[ULTRADROID Sound] Initialization failed: " + e
                 );
 
                 throw;
@@ -66,27 +75,31 @@ namespace ULTRADROID.Sound
         {
             if (runtime == null)
             {
-                Fail(
-                    callback,
-                    "Call SoundAPI.Initialize() first."
-                );
-
+                Fail(callback, "Call SoundAPI.Initialize() first.");
                 return;
             }
 
-            if (string.IsNullOrEmpty(path))
+            if (string.IsNullOrWhiteSpace(path))
             {
                 Fail(callback, "Audio path is empty.");
                 return;
             }
 
-            if (!File.Exists(path))
+            try
             {
-                Fail(callback, "Audio file not found: " + path);
+                if (!File.Exists(path))
+                {
+                    Fail(callback, "Audio file not found: " + path);
+                    return;
+                }
+            }
+            catch (Exception e)
+            {
+                Fail(callback, "Cannot access audio file: " + e.Message);
                 return;
             }
 
-            runtime.LoadAudio(
+            LoadAudio(
                 path,
                 options ?? new SoundOptions(),
                 callback
@@ -97,44 +110,10 @@ namespace ULTRADROID.Sound
             string path,
             Action<SoundHandle, string> callback)
         {
-            LoadAndPlay(
-                path,
-                new SoundOptions(),
-                callback
-            );
+            LoadAndPlay(path, new SoundOptions(), callback);
         }
 
-        private static void Fail(
-            Action<SoundHandle, string> callback,
-            string message)
-        {
-            Debug.LogError(
-                "[ULTRADROID Sound] " + message
-            );
-
-            if (callback != null)
-                callback(null, message);
-        }
-    }
-
-    public sealed class SoundRuntime : MonoBehaviour
-    {
-        // Constructor used when IL2CPP creates this component.
-        public SoundRuntime(IntPtr ptr) : base(ptr)
-        {
-        }
-
-        private sealed class PendingLoad
-        {
-            public UnityWebRequest Request;
-            public SoundOptions Options;
-            public Action<SoundHandle, string> Callback;
-        }
-
-        private readonly List<PendingLoad> pending =
-            new List<PendingLoad>();
-
-        internal void LoadAudio(
+        private static void LoadAudio(
             string path,
             SoundOptions options,
             Action<SoundHandle, string> callback)
@@ -160,7 +139,6 @@ namespace ULTRADROID.Sound
                         callback,
                         "Unsupported format. Use MP3, WAV or OGG."
                     );
-
                     return;
             }
 
@@ -185,12 +163,11 @@ namespace ULTRADROID.Sound
                 PendingLoad load = new PendingLoad
                 {
                     Request = request,
-                    Options = options ?? new SoundOptions(),
+                    Options = options,
                     Callback = callback
                 };
 
                 pending.Add(load);
-
                 request.SendWebRequest();
             }
             catch (Exception e)
@@ -205,17 +182,15 @@ namespace ULTRADROID.Sound
             }
         }
 
-        private void Update()
+        // Called every frame by the injected SoundRuntime component.
+        internal static void Tick()
         {
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingLoad load = pending[i];
 
-                if (load.Request == null ||
-                    !load.Request.isDone)
-                {
+                if (load.Request == null || !load.Request.isDone)
                     continue;
-                }
 
                 pending.RemoveAt(i);
 
@@ -238,7 +213,7 @@ namespace ULTRADROID.Sound
             }
         }
 
-        private void ProcessCompletedLoad(PendingLoad load)
+        private static void ProcessCompletedLoad(PendingLoad load)
         {
             UnityWebRequest request = load.Request;
 
@@ -248,7 +223,6 @@ namespace ULTRADROID.Sound
                     load.Callback,
                     "Audio loading failed: " + request.error
                 );
-
                 return;
             }
 
@@ -261,7 +235,6 @@ namespace ULTRADROID.Sound
                     load.Callback,
                     "Unity returned a null AudioClip."
                 );
-
                 return;
             }
 
@@ -270,7 +243,7 @@ namespace ULTRADROID.Sound
             );
 
             sourceObject.transform.SetParent(
-                transform,
+                runtime.transform,
                 false
             );
 
@@ -280,23 +253,17 @@ namespace ULTRADROID.Sound
             source.clip = clip;
             source.volume = Mathf.Clamp01(load.Options.Volume);
             source.pitch = Mathf.Clamp(
-                load.Options.Pitch,
-                -3f,
-                3f
+                load.Options.Pitch, -3f, 3f
             );
             source.loop = load.Options.Loop;
             source.playOnAwake = false;
             source.spatialBlend = 0f;
 
-            SoundHandle handle = new SoundHandle(
-                clip,
-                source
-            );
+            SoundHandle handle = new SoundHandle(clip, source);
 
             Debug.Log(
                 "[ULTRADROID Sound] Loaded clip: "
-                + clip.length
-                + " seconds."
+                + clip.length + " seconds."
             );
 
             if (load.Options.PlayOnLoad)
@@ -312,20 +279,10 @@ namespace ULTRADROID.Sound
                 load.Callback(handle, null);
         }
 
-        private static void Fail(
-            Action<SoundHandle, string> callback,
-            string message)
+        internal static void RuntimeDestroyed()
         {
-            Debug.LogError(
-                "[ULTRADROID Sound] " + message
-            );
+            runtime = null;
 
-            if (callback != null)
-                callback(null, message);
-        }
-
-        private void OnDestroy()
-        {
             foreach (PendingLoad load in pending)
             {
                 if (load.Request != null)
@@ -333,6 +290,33 @@ namespace ULTRADROID.Sound
             }
 
             pending.Clear();
+        }
+
+        private static void Fail(
+            Action<SoundHandle, string> callback,
+            string message)
+        {
+            Debug.LogError("[ULTRADROID Sound] " + message);
+
+            if (callback != null)
+                callback(null, message);
+        }
+    }
+
+    public sealed class SoundRuntime : MonoBehaviour
+    {
+        public SoundRuntime(IntPtr ptr) : base(ptr)
+        {
+        }
+
+        private void Update()
+        {
+            SoundAPI.Tick();
+        }
+
+        private void OnDestroy()
+        {
+            SoundAPI.RuntimeDestroyed();
         }
     }
 }
