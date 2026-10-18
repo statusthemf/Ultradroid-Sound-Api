@@ -1,4 +1,3 @@
-
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -6,29 +5,33 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-
-    <AssemblyName>ULTRADROID.SoundTest</AssemblyName>
-    <RootNamespace>ULTRADROID.SoundExample</RootNamespace>
-
-    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <AssemblyName>ULTRADROID.Sound.ExampleMod</AssemblyName>
+    <RootNamespace>ULTRADROID.Sound.ExampleMod</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../ULTRADROID.Sound.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="BepInEx.Core">
-      <HintPath>../lib/BepInEx.Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Il2CppSystem">
-      <HintPath>lib/Il2CppSystem.dll</HintPath>
+    <Reference Include="UnityEngine">
+      <HintPath>../lib/UnityEngine.dll</HintPath>
       <Private>false</Private>
     </Reference>
 
-    <Reference Include="BepInEx.Unity.IL2CPP">
-      <HintPath>../lib/BepInEx.Unity.IL2CPP.dll</HintPath>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>../lib/UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>../lib/UnityEngine.AudioModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>../lib/UnityEngine.UnityWebRequestModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>../lib/UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
 
@@ -42,20 +45,12 @@
       <Private>false</Private>
     </Reference>
 
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>../lib/UnityEngine.CoreModule.dll</HintPath>
+    <Reference Include="Il2CppSystem">
+      <HintPath>../lib/Il2CppSystem.dll</HintPath>
       <Private>false</Private>
     </Reference>
+
+    <ProjectReference Include="../src/ULTRADROID.Sound/ULTRADROID.Sound.csproj" />
   </ItemGroup>
-
-  <Target Name="ValidateBepInExReferences" BeforeTargets="ResolveReferences">
-    <Error
-      Condition="!Exists('../lib/BepInEx.Core.dll')"
-      Text="Missing lib/BepInEx.Core.dll" />
-
-    <Error
-      Condition="!Exists('../lib/BepInEx.Unity.IL2CPP.dll')"
-      Text="Missing lib/BepInEx.Unity.IL2CPP.dll" />
-  </Target>
 
 </Project>
