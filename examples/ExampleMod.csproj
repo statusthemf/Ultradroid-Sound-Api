@@ -1,3 +1,4 @@
+
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
@@ -49,7 +50,9 @@
       <HintPath>../lib/Il2CppSystem.dll</HintPath>
       <Private>false</Private>
     </Reference>
+  </ItemGroup>
 
+  <ItemGroup>
     <ProjectReference Include="../src/ULTRADROID.Sound/ULTRADROID.Sound.csproj" />
   </ItemGroup>
 
