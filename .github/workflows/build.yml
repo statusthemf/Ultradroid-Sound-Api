@@ -1,1 +1,57 @@
-jjjjj
+
+name: Build ULTRADROID Sound API
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Verify required DLL references
+        shell: bash
+        run: |
+          missing=0
+
+          for f in \
+            lib/UnityEngine.CoreModule.dll \
+            lib/UnityEngine.AudioModule.dll \
+            lib/UnityEngine.UnityWebRequestModule.dll \
+            lib/UnityEngine.UnityWebRequestAudioModule.dll \
+            lib/BepInEx.Core.dll \
+            lib/BepInEx.Unity.IL2CPP.dll
+          do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing reference: $f"
+              missing=1
+            fi
+          done
+
+          exit $missing
+
+      - name: Build Sound API
+        run: dotnet build ULTRADROID.Sound.csproj --configuration Release
+
+      - name: Build Sound Test Mod
+        run: dotnet build examples/ExampleMod.csproj --configuration Release
+
+      - name: Upload compiled DLLs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ULTRADROID-Sound-Test
+          path: |
+            bin/Release/netstandard2.1/ULTRADROID.Sound.dll
+            examples/bin/Release/netstandard2.1/ULTRADROID.SoundTest.dll
