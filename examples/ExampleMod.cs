@@ -1,109 +1,252 @@
 
 using System;
 using System.IO;
-using BepInEx;
-using BepInEx.Unity.IL2CPP;
-using ULTRADROID.Sound;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Networking;
 
-namespace ULTRADROID.SoundExample
+namespace ULTRADROID.Sound
 {
-    [BepInPlugin(
-        "statusthemf.ultradroid.soundtest",
-        "ULTRADROID Sound Test",
-        "0.1.0"
-    )]
-    public sealed class ExampleMod : BasePlugin
+    public static class SoundAPI
     {
-        public override void Load()
+        private static SoundRuntime runtime;
+
+        public static void Initialize()
         {
-            Log.LogInfo("[Sound Test] Plugin loaded.");
+            if (runtime != null)
+                return;
 
-            string pluginDirectory = Path.GetDirectoryName(
-                typeof(ExampleMod).Assembly.Location
+            GameObject obj = new GameObject(
+                "ULTRADROID.SoundRuntime"
             );
 
-            if (string.IsNullOrEmpty(pluginDirectory))
+            UnityEngine.Object.DontDestroyOnLoad(obj);
+            runtime = obj.AddComponent<SoundRuntime>();
+
+            Debug.Log("[ULTRADROID Sound] Runtime initialized.");
+        }
+
+        public static void LoadAndPlay(
+            string path,
+            SoundOptions options,
+            Action<SoundHandle, string> callback)
+        {
+            if (runtime == null)
             {
-                Log.LogError(
-                    "[Sound Test] Could not determine plugin directory."
-                );
+                Fail(callback, "Call SoundAPI.Initialize() first.");
                 return;
             }
 
-            string[] possiblePaths =
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {
-                Path.Combine(pluginDirectory, "test.mp3"),
-                Path.Combine(pluginDirectory, "assets", "test.mp3")
-            };
+                Fail(callback, "Audio file not found: " + path);
+                return;
+            }
 
-            string audioPath = null;
+            runtime.LoadAudio(
+                path,
+                options ?? new SoundOptions(),
+                callback
+            );
+        }
 
-            foreach (string path in possiblePaths)
+        public static void LoadAndPlay(
+            string path,
+            Action<SoundHandle, string> callback)
+        {
+            LoadAndPlay(path, new SoundOptions(), callback);
+        }
+
+        private static void Fail(
+            Action<SoundHandle, string> callback,
+            string message)
+        {
+            Debug.LogError("[ULTRADROID Sound] " + message);
+
+            if (callback != null)
+                callback(null, message);
+        }
+    }
+
+    internal sealed class SoundRuntime : MonoBehaviour
+    {
+        private sealed class PendingLoad
+        {
+            public UnityWebRequest Request;
+            public SoundOptions Options;
+            public Action<SoundHandle, string> Callback;
+        }
+
+        private readonly List<PendingLoad> pending =
+            new List<PendingLoad>();
+
+        internal void LoadAudio(
+            string path,
+            SoundOptions options,
+            Action<SoundHandle, string> callback)
+        {
+            AudioType audioType;
+
+            switch (Path.GetExtension(path).ToLowerInvariant())
             {
-                if (File.Exists(path))
-                {
-                    audioPath = path;
+                case ".mp3":
+                    audioType = AudioType.MPEG;
                     break;
-                }
+
+                case ".wav":
+                    audioType = AudioType.WAV;
+                    break;
+
+                case ".ogg":
+                    audioType = AudioType.OGGVORBIS;
+                    break;
+
+                default:
+                    Fail(callback,
+                        "Unsupported format. Use MP3, WAV or OGG.");
+                    return;
             }
 
-            if (audioPath == null)
-            {
-                Log.LogError(
-                    "[Sound Test] test.mp3 was not found. " +
-                    "Place it beside ULTRADROID.SoundTest.dll " +
-                    "or inside the assets folder."
-                );
-                return;
-            }
-
-            Log.LogInfo(
-                "[Sound Test] Audio file found: " + audioPath
-            );
+            UnityWebRequest request = null;
 
             try
             {
-                SoundAPI.Initialize();
+                string fullPath = Path.GetFullPath(path)
+                    .Replace('\\', '/');
 
-                SoundAPI.LoadAndPlay(
-                    audioPath,
-                    new SoundOptions
-                    {
-                        Volume = 1f,
-                        Pitch = 1f,
-                        Loop = false,
-                        PlayOnLoad = true
-                    },
-                    (handle, error) =>
-                    {
-                        if (handle == null)
-                        {
-                            Log.LogError(
-                                "[Sound Test] Audio loading failed: " +
-                                error
-                            );
-                            return;
-                        }
+                // A Unix absolute path produces file:///storage/...
+                string fileUri = "file://" + fullPath;
 
-                        Log.LogInfo(
-                            "[Sound Test] Audio loaded successfully. " +
-                            "Duration: " +
-                            handle.Clip.length +
-                            " seconds."
-                        );
-
-                        Log.LogInfo(
-                            "[Sound Test] Playback was requested."
-                        );
-                    }
+                Debug.Log(
+                    "[ULTRADROID Sound] Loading: " + fileUri
                 );
+
+                request = UnityWebRequestMultimedia.GetAudioClip(
+                    fileUri,
+                    audioType
+                );
+
+                PendingLoad load = new PendingLoad
+                {
+                    Request = request,
+                    Options = options,
+                    Callback = callback
+                };
+
+                pending.Add(load);
+
+                request.SendWebRequest();
             }
-            catch (Exception exception)
+            catch (Exception e)
             {
-                Log.LogError(
-                    "[Sound Test] Exception: " + exception
-                );
+                if (request != null)
+                    request.Dispose();
+
+                Fail(callback,
+                    "Could not start audio loading: " + e);
             }
+        }
+
+        private void Update()
+        {
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                PendingLoad load = pending[i];
+
+                if (load.Request == null || !load.Request.isDone)
+                    continue;
+
+                pending.RemoveAt(i);
+
+                try
+                {
+                    ProcessCompletedLoad(load);
+                }
+                catch (Exception e)
+                {
+                    Fail(load.Callback,
+                        "Audio processing failed: " + e);
+                }
+                finally
+                {
+                    if (load.Request != null)
+                        load.Request.Dispose();
+                }
+            }
+        }
+
+        private void ProcessCompletedLoad(PendingLoad load)
+        {
+            UnityWebRequest request = load.Request;
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Fail(load.Callback,
+                    "Audio loading failed: " + request.error);
+                return;
+            }
+
+            AudioClip clip =
+                DownloadHandlerAudioClip.GetContent(request);
+
+            if (clip == null)
+            {
+                Fail(load.Callback,
+                    "Unity returned a null AudioClip.");
+                return;
+            }
+
+            GameObject sourceObject =
+                new GameObject("ULTRADROID Sound Source");
+
+            sourceObject.transform.SetParent(transform, false);
+
+            AudioSource source =
+                sourceObject.AddComponent<AudioSource>();
+
+            source.clip = clip;
+            source.volume = Mathf.Clamp01(load.Options.Volume);
+            source.pitch = Mathf.Clamp(load.Options.Pitch, -3f, 3f);
+            source.loop = load.Options.Loop;
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+
+            SoundHandle handle = new SoundHandle(clip, source);
+
+            Debug.Log(
+                "[ULTRADROID Sound] Loaded clip: " +
+                clip.length + " seconds."
+            );
+
+            if (load.Options.PlayOnLoad)
+            {
+                source.Play();
+                Debug.Log("[ULTRADROID Sound] Playback requested.");
+            }
+
+            if (load.Callback != null)
+                load.Callback(handle, null);
+        }
+
+        private static void Fail(
+            Action<SoundHandle, string> callback,
+            string message)
+        {
+            Debug.LogError("[ULTRADROID Sound] " + message);
+
+            if (callback != null)
+                callback(null, message);
+        }
+
+        private void OnDestroy()
+        {
+            foreach (PendingLoad load in pending)
+            {
+                if (load.Request != null)
+                    load.Request.Dispose();
+            }
+
+            pending.Clear();
         }
     }
 }
