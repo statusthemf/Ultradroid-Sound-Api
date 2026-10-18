@@ -1,3 +1,4 @@
+
 using System;
 using System.IO;
 using BepInEx;
@@ -17,19 +18,27 @@ namespace ULTRADROID.SoundExample
         {
             Log.LogInfo("[Sound Test] Plugin loaded.");
 
-            string directory = Path.GetDirectoryName(
+            string pluginDirectory = Path.GetDirectoryName(
                 typeof(ExampleMod).Assembly.Location
             );
 
-            string[] paths =
+            if (string.IsNullOrEmpty(pluginDirectory))
             {
-                Path.Combine(directory, "test.mp3"),
-                Path.Combine(directory, "assets", "test.mp3")
+                Log.LogError(
+                    "[Sound Test] Could not determine plugin directory."
+                );
+                return;
+            }
+
+            string[] possiblePaths =
+            {
+                Path.Combine(pluginDirectory, "test.mp3"),
+                Path.Combine(pluginDirectory, "assets", "test.mp3")
             };
 
             string audioPath = null;
 
-            foreach (string path in paths)
+            foreach (string path in possiblePaths)
             {
                 if (File.Exists(path))
                 {
@@ -41,41 +50,60 @@ namespace ULTRADROID.SoundExample
             if (audioPath == null)
             {
                 Log.LogError(
-                    "[Sound Test] test.mp3 not found. " +
-                    "Put it beside the DLL or in assets/."
+                    "[Sound Test] test.mp3 was not found. " +
+                    "Place it beside ULTRADROID.SoundTest.dll " +
+                    "or inside the assets folder."
                 );
-
                 return;
             }
 
-            SoundAPI.Initialize();
-
-            SoundAPI.LoadAndPlay(
-                audioPath,
-                new SoundOptions
-                {
-                    Volume = 1f,
-                    Pitch = 1f,
-                    Loop = false,
-                    PlayOnLoad = true
-                },
-                (handle, error) =>
-                {
-                    if (handle == null)
-                    {
-                        Log.LogError(
-                            "[Sound Test] FAILED: " + error
-                        );
-                    }
-                    else
-                    {
-                        Log.LogInfo(
-                            "[Sound Test] Clip loaded. Duration: " +
-                            handle.Clip.length + " seconds."
-                        );
-                    }
-                }
+            Log.LogInfo(
+                "[Sound Test] Audio file found: " + audioPath
             );
+
+            try
+            {
+                SoundAPI.Initialize();
+
+                SoundAPI.LoadAndPlay(
+                    audioPath,
+                    new SoundOptions
+                    {
+                        Volume = 1f,
+                        Pitch = 1f,
+                        Loop = false,
+                        PlayOnLoad = true
+                    },
+                    (handle, error) =>
+                    {
+                        if (handle == null)
+                        {
+                            Log.LogError(
+                                "[Sound Test] Audio loading failed: " +
+                                error
+                            );
+                            return;
+                        }
+
+                        Log.LogInfo(
+                            "[Sound Test] Audio loaded successfully. " +
+                            "Duration: " +
+                            handle.Clip.length +
+                            " seconds."
+                        );
+
+                        Log.LogInfo(
+                            "[Sound Test] Playback was requested."
+                        );
+                    }
+                );
+            }
+            catch (Exception exception)
+            {
+                Log.LogError(
+                    "[Sound Test] Exception: " + exception
+                );
+            }
         }
     }
 }
