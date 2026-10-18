@@ -13,6 +13,9 @@ namespace ULTRADROID.Sound
         private static SoundRuntime runtime;
         private static bool runtimeTypeRegistered;
 
+        private static Action<string> infoLogger;
+        private static Action<string> errorLogger;
+
         private sealed class PendingLoad
         {
             public UnityWebRequest Request;
@@ -23,11 +26,43 @@ namespace ULTRADROID.Sound
         private static readonly List<PendingLoad> pending =
             new List<PendingLoad>();
 
+        public static void SetLogger(
+            Action<string> info,
+            Action<string> error)
+        {
+            infoLogger = info;
+            errorLogger = error;
+
+            LogInfo("[ULTRADROID Sound] Logger connected. BUILD TEST 005");
+        }
+
+        internal static void LogInfo(string message)
+        {
+            if (infoLogger != null)
+            {
+                infoLogger(message);
+                return;
+            }
+
+            Debug.Log(message);
+        }
+
+        internal static void LogError(string message)
+        {
+            if (errorLogger != null)
+            {
+                errorLogger(message);
+                return;
+            }
+
+            Debug.LogError(message);
+        }
+
         public static void Initialize()
         {
             if (runtime != null)
             {
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] Runtime already initialized."
                 );
                 return;
@@ -40,7 +75,7 @@ namespace ULTRADROID.Sound
                     ClassInjector.RegisterTypeInIl2Cpp<SoundRuntime>();
                     runtimeTypeRegistered = true;
 
-                    Debug.Log(
+                    LogInfo(
                         "[ULTRADROID Sound] SoundRuntime type registered."
                     );
                 }
@@ -61,15 +96,15 @@ namespace ULTRADROID.Sound
                     );
                 }
 
-                Debug.Log(
-                    "[ULTRADROID Sound] BUILD TEST 004 - NEW API LOADED"
+                LogInfo(
+                    "[ULTRADROID Sound] BUILD TEST 005 - NEW API LOADED"
                 );
             }
             catch (Exception e)
             {
                 runtime = null;
 
-                Debug.LogError(
+                LogError(
                     "[ULTRADROID Sound] Initialization failed: " + e
                 );
 
@@ -82,8 +117,8 @@ namespace ULTRADROID.Sound
             SoundOptions options,
             Action<SoundHandle, string> callback)
         {
-            Debug.Log(
-                "[ULTRADROID Sound] LoadAndPlay called."
+            LogInfo(
+                "[ULTRADROID Sound] LoadAndPlay called. BUILD TEST 005"
             );
 
             if (runtime == null)
@@ -114,7 +149,7 @@ namespace ULTRADROID.Sound
 
                 FileInfo fileInfo = new FileInfo(path);
 
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] File found. Size="
                     + fileInfo.Length
                     + " bytes."
@@ -185,7 +220,7 @@ namespace ULTRADROID.Sound
 
                 string fileUri = new Uri(fullPath).AbsoluteUri;
 
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] Starting request: "
                     + fileUri
                 );
@@ -214,7 +249,7 @@ namespace ULTRADROID.Sound
 
                 pending.Add(load);
 
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] Sending audio request."
                 );
 
@@ -233,7 +268,7 @@ namespace ULTRADROID.Sound
                     return;
                 }
 
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] Request started. Pending="
                     + pending.Count
                 );
@@ -291,7 +326,7 @@ namespace ULTRADROID.Sound
                 if (!isDone)
                     continue;
 
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] Request completed. Result="
                     + load.Request.result
                     + ", Error="
@@ -379,11 +414,7 @@ namespace ULTRADROID.Sound
 
             source.clip = clip;
             source.volume = Mathf.Clamp01(load.Options.Volume);
-            source.pitch = Mathf.Clamp(
-                load.Options.Pitch,
-                -3f,
-                3f
-            );
+            source.pitch = Mathf.Clamp(load.Options.Pitch, -3f, 3f);
             source.loop = load.Options.Loop;
             source.playOnAwake = false;
             source.spatialBlend = 0f;
@@ -391,7 +422,7 @@ namespace ULTRADROID.Sound
             SoundHandle handle =
                 new SoundHandle(clip, source);
 
-            Debug.Log(
+            LogInfo(
                 "[ULTRADROID Sound] Loaded clip. Duration="
                 + clip.length
                 + " seconds; samples="
@@ -404,7 +435,7 @@ namespace ULTRADROID.Sound
             {
                 source.Play();
 
-                Debug.Log(
+                LogInfo(
                     "[ULTRADROID Sound] Playback requested. IsPlaying="
                     + source.isPlaying
                 );
@@ -426,7 +457,7 @@ namespace ULTRADROID.Sound
 
             pending.Clear();
 
-            Debug.Log(
+            LogInfo(
                 "[ULTRADROID Sound] Runtime destroyed."
             );
         }
@@ -435,9 +466,7 @@ namespace ULTRADROID.Sound
             Action<SoundHandle, string> callback,
             string message)
         {
-            Debug.LogError(
-                "[ULTRADROID Sound] " + message
-            );
+            LogError("[ULTRADROID Sound] " + message);
 
             if (callback != null)
             {
@@ -447,7 +476,7 @@ namespace ULTRADROID.Sound
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError(
+                    LogError(
                         "[ULTRADROID Sound] Error callback threw: " + e
                     );
                 }
@@ -472,8 +501,8 @@ namespace ULTRADROID.Sound
             {
                 updateDiagnosticLogged = true;
 
-                Debug.Log(
-                    "[ULTRADROID Sound] BUILD TEST 004 - UPDATE RUNNING"
+                SoundAPI.LogInfo(
+                    "[ULTRADROID Sound] BUILD TEST 005 - UPDATE RUNNING"
                 );
             }
 
