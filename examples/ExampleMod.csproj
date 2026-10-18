@@ -6,13 +6,18 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
+
     <AssemblyName>ULTRADROID.SoundTest</AssemblyName>
     <RootNamespace>ULTRADROID.SoundExample</RootNamespace>
+
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="../ULTRADROID.Sound.csproj" />
+  </ItemGroup>
 
+  <ItemGroup>
     <Reference Include="BepInEx.Core">
       <HintPath>../lib/BepInEx.Core.dll</HintPath>
       <Private>false</Private>
@@ -38,5 +43,15 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <Target Name="ValidateBepInExReferences" BeforeTargets="ResolveReferences">
+    <Error
+      Condition="!Exists('../lib/BepInEx.Core.dll')"
+      Text="Missing lib/BepInEx.Core.dll" />
+
+    <Error
+      Condition="!Exists('../lib/BepInEx.Unity.IL2CPP.dll')"
+      Text="Missing lib/BepInEx.Unity.IL2CPP.dll" />
+  </Target>
 
 </Project>
