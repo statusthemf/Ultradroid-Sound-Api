@@ -13,7 +13,7 @@ namespace ULTRADROID.Sound.ExampleMod
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.5"
+        "1.0.6"
     )]
     public sealed class ExampleMod : BasePlugin
     {
@@ -37,7 +37,7 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             Instance = this;
 
-            Info("ULTRADROID Sound Test 1.0.5 loaded.");
+            Info("ULTRADROID Sound Test 1.0.6 loaded.");
 
             try
             {
@@ -54,16 +54,16 @@ namespace ULTRADROID.Sound.ExampleMod
 
                 if (runner == null)
                 {
-                    Error("Failed to attach SoundExampleRunner.");
+                    Error("Failed to attach gameplay detector.");
                     return;
                 }
 
                 Info("Gameplay detector attached.");
-                Info("Waiting for a stable gameplay scene.");
+                Info("Waiting for gameplay.");
             }
             catch (Exception e)
             {
-                Error("Example initialization failed: " + e);
+                Error("Plugin initialization failed: " + e);
             }
         }
 
@@ -74,11 +74,10 @@ namespace ULTRADROID.Sound.ExampleMod
 
             soundRequested = true;
 
-            Info("Gameplay confirmed in scene: " + sceneName);
+            Info("Gameplay detected: " + sceneName);
 
             try
             {
-                // Initialize the Sound API only after gameplay is detected.
                 SoundAPI.Initialize();
 
                 string audioPath =
@@ -111,7 +110,7 @@ namespace ULTRADROID.Sound.ExampleMod
             }
             catch (Exception e)
             {
-                Error("Audio initialization failed: " + e);
+                Error("Sound initialization or playback request failed: " + e);
                 soundRequested = false;
             }
         }
@@ -127,7 +126,7 @@ namespace ULTRADROID.Sound.ExampleMod
 
             if (handle == null)
             {
-                Error("Sound API returned a null SoundHandle.");
+                Error("Audio callback returned a null handle.");
                 soundRequested = false;
                 return;
             }
@@ -135,7 +134,7 @@ namespace ULTRADROID.Sound.ExampleMod
             currentSound = handle;
 
             Info(
-                "Audio loaded. IsPlaying=" +
+                "Audio loaded successfully. IsPlaying=" +
                 currentSound.IsPlaying
             );
         }
@@ -146,7 +145,9 @@ namespace ULTRADROID.Sound.ExampleMod
         private int candidateSceneHandle = -1;
         private int stableSceneFrames;
         private int waitLogCounter;
+
         private bool gameplayTriggered;
+        private bool exceptionLogged;
 
         public SoundExampleRunner(IntPtr ptr) : base(ptr)
         {
@@ -161,14 +162,21 @@ namespace ULTRADROID.Sound.ExampleMod
             {
                 Scene scene = SceneManager.GetActiveScene();
 
-                if (!scene.IsValid() || !scene.isLoaded)
+                // IMPORTANT:
+                // Do not call scene.IsValid().
+                // This game's IL2CPP runtime cannot resolve
+                // Scene.IsValidInternal.
+
+                int sceneHandle = scene.handle;
+                string sceneName = scene.name;
+
+                if (sceneHandle < 0 ||
+                    string.IsNullOrEmpty(sceneName))
                 {
                     ResetCandidate();
-                    LogWait("Waiting for a valid loaded scene.");
+                    LogWait("Waiting for an active scene.");
                     return;
                 }
-
-                string sceneName = scene.name ?? "";
 
                 if (IsStartupScene(sceneName))
                 {
@@ -177,25 +185,27 @@ namespace ULTRADROID.Sound.ExampleMod
                     return;
                 }
 
-                Camera camera = FindSceneCamera(scene);
+                Camera camera = FindSceneCamera(sceneHandle);
 
                 if (camera == null)
                 {
                     ResetCandidate();
                     LogWait(
-                        "Waiting for an enabled camera in " + sceneName
+                        "Waiting for an enabled camera in scene: " +
+                        sceneName
                     );
                     return;
                 }
 
-                if (candidateSceneHandle != scene.handle)
+                if (candidateSceneHandle != sceneHandle)
                 {
-                    candidateSceneHandle = scene.handle;
+                    candidateSceneHandle = sceneHandle;
                     stableSceneFrames = 0;
 
                     Log(
                         "Scene candidate: " + sceneName +
-                        "; camera: " + camera.name
+                        ", handle=" + sceneHandle +
+                        ", camera=" + camera.name
                     );
                 }
 
@@ -206,7 +216,10 @@ namespace ULTRADROID.Sound.ExampleMod
 
                 gameplayTriggered = true;
 
-                Log("Gameplay detected after 10 stable frames.");
+                Log(
+                    "Gameplay confirmed after 10 stable frames: " +
+                    sceneName
+                );
 
                 if (ExampleMod.Instance != null)
                 {
@@ -214,12 +227,17 @@ namespace ULTRADROID.Sound.ExampleMod
                 }
                 else
                 {
-                    LogError("ExampleMod.Instance is null.");
+                    LogError("Plugin instance is unavailable.");
                 }
             }
             catch (Exception e)
             {
-                LogError("Gameplay detection exception: " + e);
+                // Prevent the same exception flooding the log every frame.
+                if (!exceptionLogged)
+                {
+                    exceptionLogged = true;
+                    LogError("Gameplay detection failed: " + e);
+                }
             }
         }
 
@@ -235,13 +253,13 @@ namespace ULTRADROID.Sound.ExampleMod
                    name.Contains("credits");
         }
 
-        private static Camera FindSceneCamera(Scene scene)
+        private static Camera FindSceneCamera(int sceneHandle)
         {
             try
             {
                 Camera mainCamera = Camera.main;
 
-                if (IsValidCamera(mainCamera, scene))
+                if (IsUsableCamera(mainCamera, sceneHandle))
                     return mainCamera;
             }
             catch (Exception e)
@@ -256,7 +274,7 @@ namespace ULTRADROID.Sound.ExampleMod
 
                 foreach (Camera camera in cameras)
                 {
-                    if (IsValidCamera(camera, scene))
+                    if (IsUsableCamera(camera, sceneHandle))
                         return camera;
                 }
             }
@@ -268,12 +286,20 @@ namespace ULTRADROID.Sound.ExampleMod
             return null;
         }
 
-        private static bool IsValidCamera(Camera camera, Scene scene)
+        private static bool IsUsableCamera(
+            Camera camera,
+            int sceneHandle)
         {
-            return camera != null &&
-                   camera.isActiveAndEnabled &&
-                   camera.gameObject.activeInHierarchy &&
-                   camera.gameObject.scene.handle == scene.handle;
+            if (camera == null)
+                return false;
+
+            if (!camera.isActiveAndEnabled)
+                return false;
+
+            if (!camera.gameObject.activeInHierarchy)
+                return false;
+
+            return camera.gameObject.scene.handle == sceneHandle;
         }
 
         private void ResetCandidate()
@@ -305,7 +331,7 @@ namespace ULTRADROID.Sound.ExampleMod
             if (ExampleMod.Instance != null)
             {
                 ExampleMod.Instance.Log.LogWarning(
-                    "[Sound Test] " + message
+                    "[Gameplay Detector] " + message
                 );
             }
         }
