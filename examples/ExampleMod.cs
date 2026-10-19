@@ -1,4 +1,3 @@
-
 using System;
 using System.IO;
 using BepInEx;
@@ -13,7 +12,7 @@ namespace ULTRADROID.Sound.ExampleMod
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.8"
+        "1.0.9"
     )]
     public sealed class ExampleMod : BasePlugin
     {
@@ -21,7 +20,12 @@ namespace ULTRADROID.Sound.ExampleMod
 
         private SoundHandle currentSound;
         private SoundExampleRunner runner;
+
         private bool soundRequested;
+        private bool preloadCompleted;
+
+        private string audioPath;
+        private SoundOptions soundOptions;
 
         internal void Info(string message)
         {
@@ -37,7 +41,7 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             Instance = this;
 
-            Info("ULTRADROID Sound Test 1.0.8 loaded.");
+            Info("ULTRADROID Sound Test 1.0.9 loaded.");
 
             try
             {
@@ -78,7 +82,7 @@ namespace ULTRADROID.Sound.ExampleMod
             {
                 SoundAPI.Initialize();
 
-                string audioPath =
+                audioPath =
                     "/storage/emulated/0/BepInEx_Android/" +
                     "com.aarongamingdev.ULTRAKILL/" +
                     "BepInEx/plugins/test.mp3";
@@ -90,7 +94,7 @@ namespace ULTRADROID.Sound.ExampleMod
                     return;
                 }
 
-                SoundOptions options = new SoundOptions
+                soundOptions = new SoundOptions
                 {
                     Volume = 1f,
                     Pitch = 1f,
@@ -98,43 +102,112 @@ namespace ULTRADROID.Sound.ExampleMod
                     PlayOnLoad = true
                 };
 
-                Info("Loading test.mp3.");
+                Info("Preloading test.mp3 into the audio cache.");
 
-                SoundAPI.LoadAndPlay(
-                    audioPath,
-                    options,
-                    OnSoundLoaded
-                );
+                SoundAPI.Load(audioPath, OnClipPreloaded);
             }
             catch (Exception e)
             {
-                Error("Sound playback request failed: " + e);
+                Error("Sound preload request failed: " + e);
                 soundRequested = false;
             }
         }
 
-        private void OnSoundLoaded(SoundHandle handle, string error)
+        private void OnClipPreloaded(AudioClip clip, string error)
         {
             if (!string.IsNullOrEmpty(error))
             {
-                Error("Audio loading failed: " + error);
+                Error("Audio preload failed: " + error);
                 soundRequested = false;
                 return;
             }
 
-            if (handle == null)
+            if (clip == null)
             {
-                Error("Sound API returned a null handle.");
+                Error("Preload returned a null AudioClip.");
                 soundRequested = false;
                 return;
             }
 
-            currentSound = handle;
+            preloadCompleted = true;
 
             Info(
-                "Audio loaded. IsPlaying=" +
-                currentSound.IsPlaying
+                "Audio cached successfully. " +
+                "Length=" + clip.length +
+                " seconds. Cached clips=" +
+                SoundAPI.CachedClipCount
             );
+
+            PlayCachedTestSound();
+        }
+
+        private void PlayCachedTestSound()
+        {
+            if (!preloadCompleted)
+            {
+                Error("Cannot play: audio has not been preloaded.");
+                return;
+            }
+
+            try
+            {
+                Info("Playing test.mp3 from the cache.");
+
+                currentSound = SoundAPI.Play(
+                    audioPath,
+                    soundOptions
+                );
+
+                if (currentSound == null)
+                {
+                    Error(
+                        "SoundAPI.Play returned null. " +
+                        "Check that the audio is cached and the API is initialized."
+                    );
+                    return;
+                }
+
+                Info(
+                    "Cached playback requested. IsPlaying=" +
+                    currentSound.IsPlaying
+                );
+            }
+            catch (Exception e)
+            {
+                Error("Cached playback failed: " + e);
+            }
+        }
+
+        // Call this method when a gameplay action should trigger the sound.
+        // It reuses the cached AudioClip instead of loading the file again.
+        internal void PlayActionSound()
+        {
+            if (!preloadCompleted)
+            {
+                Info("Action sound ignored: preload is not ready yet.");
+                return;
+            }
+
+            try
+            {
+                SoundHandle handle = SoundAPI.Play(
+                    audioPath,
+                    soundOptions
+                );
+
+                if (handle == null)
+                {
+                    Error("Action playback failed: no SoundHandle returned.");
+                    return;
+                }
+
+                currentSound = handle;
+                Info("Action sound played using the cached clip.");
+            }
+            catch (Exception e)
+            {
+                Error("Action sound failed: " + e);
+            }
         }
     }
 
@@ -170,9 +243,11 @@ namespace ULTRADROID.Sound.ExampleMod
                 if (IsStartupScene(sceneName))
                 {
                     ResetDetection();
+
                     LogOccasionally(
                         "Skipping startup scene: " + sceneName
                     );
+
                     return;
                 }
 
