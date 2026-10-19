@@ -55,7 +55,7 @@ namespace ULTRADROID.Sound
         public void SetPitch(float pitch)
         {
             if (Source != null)
-                Source.pitch = Mathf.Clamp(pitch, -3f, 3f);
+                Source.pitch = Mathf.Clamp(item.Options.Pitch, -3f, 3f);
         }
     }
 }
