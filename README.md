@@ -14,8 +14,8 @@ Features
 
 Requirements
 
-- ULTRAKILL on Android.
-- BepInEx for Android.
+- ULTRADROID
+- BepInEx for Android
 - A compatible ULTRADROID Sound API build.
 
 Installation
@@ -26,9 +26,9 @@ Make sure BepInEx for Android is installed and working with your ULTRAKILL game.
 
 2. Install the Sound API
 
-1. Open your Android launcher.
+1. Open your BEPINEX launcher.
 2. Create a new modpack, or open the modpack you want to use.
-3. Import the ULTRADROID Sound API into that modpack.
+3. Import the ULTRADROID Sound API into that modpack ( With the examples mod to test).
 
 3. Install the DLL
 
