@@ -13,14 +13,14 @@ namespace ULTRADROID.Sound.ExampleMod
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.9"
+        "1.0.10"
     )]
     public sealed class ExampleMod : BasePlugin
     {
         internal static ExampleMod Instance;
 
-        private SoundHandle currentSound;
         private SoundExampleRunner runner;
+        private SoundHandle currentSound;
 
         private bool soundRequested;
         private bool preloadCompleted;
@@ -28,7 +28,7 @@ namespace ULTRADROID.Sound.ExampleMod
         private bool lifecycleTestFinished;
 
         private int lifecycleStage;
-        private float lifecycleStageTime;
+        private float stageStartedAt;
 
         private string audioPath;
         private SoundOptions soundOptions;
@@ -47,7 +47,7 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             Instance = this;
 
-            Info("ULTRADROID Sound Test 1.0.9 loaded.");
+            Info("ULTRADROID Sound Test 1.0.10 loaded.");
 
             try
             {
@@ -108,13 +108,13 @@ namespace ULTRADROID.Sound.ExampleMod
                     PlayOnLoad = true
                 };
 
-                Info("Preloading test.mp3 into the audio cache.");
+                Info("Preloading test.mp3.");
 
                 SoundAPI.Load(audioPath, OnClipPreloaded);
             }
             catch (Exception e)
             {
-                Error("Sound preload request failed: " + e);
+                Error("Sound initialization or preload failed: " + e);
                 soundRequested = false;
             }
         }
@@ -138,31 +138,26 @@ namespace ULTRADROID.Sound.ExampleMod
             preloadCompleted = true;
 
             Info(
-                "Audio cached successfully. Length=" +
-                clip.length +
-                " seconds. Cached clips=" +
-                SoundAPI.CachedClipCount
+                "Audio cached. Length=" + clip.length +
+                " seconds; cached clips=" + SoundAPI.CachedClipCount
             );
 
-            PlayCachedTestSound();
+            StartNaturalCompletionTest();
         }
 
-        private void PlayCachedTestSound()
+        private void StartNaturalCompletionTest()
         {
             if (!preloadCompleted)
             {
-                Error("Cannot play: audio has not been preloaded.");
+                Error("Cannot play: preload is not complete.");
                 return;
             }
 
             try
             {
-                Info("Playing test.mp3 from the cache.");
+                Info("Starting cached playback.");
 
-                currentSound = SoundAPI.Play(
-                    audioPath,
-                    soundOptions
-                );
+                currentSound = SoundAPI.Play(audioPath, soundOptions);
 
                 if (currentSound == null)
                 {
@@ -170,175 +165,160 @@ namespace ULTRADROID.Sound.ExampleMod
                     return;
                 }
 
-                Info(
-                    "Initial playback requested. IsPlaying=" +
-                    currentSound.IsPlaying
-                );
+                Info("Playback started. IsPlaying=" + currentSound.IsPlaying);
+                Info("Active sounds=" + SoundAPI.ActiveSoundCount);
 
-                Info(
-                    "Active sounds after playback request: " +
-                    SoundAPI.ActiveSoundCount
-                );
-
-                // Begin the automatic lifecycle test.
                 lifecycleTestStarted = true;
                 lifecycleTestFinished = false;
-                lifecycleStage = 1;
-                lifecycleStageTime = Time.unscaledTime;
 
-                Info("Lifecycle test started.");
+                // Stage 1: allow playback to run.
+                lifecycleStage = 1;
+                stageStartedAt = Time.unscaledTime;
+
+                Info("Natural-completion lifecycle test started.");
             }
             catch (Exception e)
             {
-                Error("Cached playback failed: " + e);
+                Error("Could not start playback: " + e);
             }
         }
 
-        // Called every frame by SoundExampleRunner.
         internal void TickLifecycleTest()
         {
             if (!lifecycleTestStarted || lifecycleTestFinished)
                 return;
 
-            float elapsed = Time.unscaledTime - lifecycleStageTime;
-
             try
             {
+                float elapsed = Time.unscaledTime - stageStartedAt;
+
                 switch (lifecycleStage)
                 {
                     case 1:
-                        // Let the sound play for two seconds.
+                        // Briefly test pause/resume, then let the clip
+                        // play all the way to its natural end.
                         if (elapsed < 2f)
                             return;
 
                         if (currentSound == null)
                         {
-                            Error("Handle became null before pause test.");
-                            FinishLifecycleTest();
+                            Error("SoundHandle became null.");
+                            FinishTest();
                             return;
                         }
 
                         currentSound.Pause();
 
                         Info(
-                            "PAUSE TEST: requested. IsPlaying=" +
+                            "Pause requested. IsPlaying=" +
                             currentSound.IsPlaying
                         );
 
                         lifecycleStage = 2;
-                        lifecycleStageTime = Time.unscaledTime;
+                        stageStartedAt = Time.unscaledTime;
                         break;
 
                     case 2:
-                        // Leave it paused for one second.
                         if (elapsed < 1f)
                             return;
 
                         currentSound.Resume();
 
                         Info(
-                            "RESUME TEST: requested. IsPlaying=" +
+                            "Resume requested. IsPlaying=" +
                             currentSound.IsPlaying
                         );
 
                         lifecycleStage = 3;
-                        lifecycleStageTime = Time.unscaledTime;
+                        stageStartedAt = Time.unscaledTime;
                         break;
 
                     case 3:
-                        // Allow playback to continue before testing unload.
-                        if (elapsed < 2f)
+                        // Wait longer than the expected remaining clip
+                        // duration. Crucially, do not call Stop().
+                        if (elapsed < 15f)
                             return;
 
-                        Info(
-                            "UNLOAD TEST: trying to unload while the " +
-                            "sound is active."
-                        );
+                        Info("NATURAL END CHECK: no Stop() was called.");
+                        Info("Active sounds=" + SoundAPI.ActiveSoundCount);
+                        Info("Cached clips=" + SoundAPI.CachedClipCount);
 
-                        SoundAPI.Unload(audioPath);
+                        if (currentSound.IsPlaying)
+                        {
+                            Info(
+                                "Audio is still playing. The test cannot " +
+                                "confirm natural completion yet."
+                            );
+
+                            // Do not destroy a clip that is still playing.
+                            FinishTest();
+                            return;
+                        }
 
                         Info(
-                            "Cache present after active unload attempt: " +
-                            SoundAPI.IsCached(audioPath)
+                            "Playback is no longer reported as playing. " +
+                            "Waiting for source cleanup."
                         );
 
                         lifecycleStage = 4;
-                        lifecycleStageTime = Time.unscaledTime;
+                        stageStartedAt = Time.unscaledTime;
                         break;
 
                     case 4:
-                        Info("STOP TEST: stopping the active sound.");
-
-                        if (currentSound != null)
-                            currentSound.Stop();
-
-                        Info(
-                            "Stop requested. Active sounds reported: " +
-                            SoundAPI.ActiveSoundCount
-                        );
-
-                        lifecycleStage = 5;
-                        lifecycleStageTime = Time.unscaledTime;
-                        break;
-
-                    case 5:
-                        // Allow SoundAPI.Update to perform cleanup.
-                        if (elapsed < 2f)
+                        // Allow SoundRuntime.Update to process cleanup.
+                        if (elapsed < 3f)
                             return;
 
-                        Info(
-                            "CLEANUP CHECK: active sounds=" +
-                            SoundAPI.ActiveSoundCount
-                        );
+                        int activeCount = SoundAPI.ActiveSoundCount;
 
-                        Info(
-                            "CLEANUP CHECK: cached clips=" +
-                            SoundAPI.CachedClipCount
-                        );
+                        Info("NATURAL CLEANUP RESULT: active sounds=" + activeCount);
 
-                        Info("UNLOAD TEST: retrying after cleanup.");
-
-                        SoundAPI.Unload(audioPath);
-
-                        bool stillCached = SoundAPI.IsCached(audioPath);
-
-                        Info(
-                            "Cache present after final unload attempt: " +
-                            stillCached
-                        );
-
-                        if (stillCached)
+                        if (activeCount == 0)
                         {
-                            Info(
-                                "The clip remains cached. Check the SoundAPI " +
-                                "logs for active-source or unload reasons."
-                            );
+                            Info("PASS: no active playback sources remain.");
+
+                            Info("Attempting to unload the cached clip.");
+                            SoundAPI.Unload(audioPath);
+
+                            bool stillCached = SoundAPI.IsCached(audioPath);
+
+                            Info("Clip still cached=" + stillCached);
+
+                            if (!stillCached)
+                                Info("PASS: cached clip unloaded after cleanup.");
+                            else
+                                Error("Cache unload did not succeed.");
                         }
                         else
                         {
-                            Info("Cache unload confirmed.");
+                            Error(
+                                "Natural cleanup was not confirmed. " +
+                                "Active sounds=" + activeCount
+                            );
+
+                            Info(
+                                "Keeping the clip cached because a playback " +
+                                "source may still be registered."
+                            );
                         }
 
-                        FinishLifecycleTest();
+                        FinishTest();
                         break;
                 }
             }
             catch (Exception e)
             {
-                Error("Lifecycle test failed: " + e);
-                FinishLifecycleTest();
+                Error("Lifecycle test exception: " + e);
+                FinishTest();
             }
         }
 
-        private void FinishLifecycleTest()
+        private void FinishTest()
         {
             lifecycleTestFinished = true;
             lifecycleTestStarted = false;
 
-            Info(
-                "Lifecycle test finished. Review the logs for each " +
-                "test result."
-            );
+            Info("Natural-completion test finished.");
         }
 
         // Retained for future gameplay-action integration.
@@ -346,29 +326,26 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             if (!preloadCompleted)
             {
-                Info("Action sound ignored: preload is not ready yet.");
+                Info("Action sound ignored: preload is not ready.");
                 return;
             }
 
             try
             {
-                SoundHandle handle = SoundAPI.Play(
-                    audioPath,
-                    soundOptions
-                );
+                SoundHandle handle = SoundAPI.Play(audioPath, soundOptions);
 
                 if (handle == null)
                 {
-                    Error("Action playback failed: no SoundHandle returned.");
+                    Error("Action playback returned no handle.");
                     return;
                 }
 
                 currentSound = handle;
-                Info("Action sound played using the cached clip.");
+                Info("Action sound played from the cache.");
             }
             catch (Exception e)
             {
-                Error("Action sound failed: " + e);
+                Error("Action playback failed: " + e);
             }
         }
     }
@@ -388,7 +365,6 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             try
             {
-                // Keep running lifecycle tests after scene detection.
                 if (ExampleMod.Instance != null)
                     ExampleMod.Instance.TickLifecycleTest();
 
@@ -432,23 +408,16 @@ namespace ULTRADROID.Sound.ExampleMod
 
                 triggered = true;
 
-                Log(
-                    "Stable scene confirmed: " + sceneName +
-                    ". Starting Sound API."
-                );
+                Log("Stable scene confirmed: " + sceneName);
 
                 if (ExampleMod.Instance != null)
-                {
                     ExampleMod.Instance.OnGameplayDetected(sceneName);
-                }
                 else
-                {
                     LogError("Plugin instance is unavailable.");
-                }
             }
             catch (Exception e)
             {
-                LogError("Scene detection or lifecycle test failed: " + e);
+                LogError("Scene detector or lifecycle test failed: " + e);
             }
         }
 
@@ -481,21 +450,13 @@ namespace ULTRADROID.Sound.ExampleMod
         private static void Log(string message)
         {
             if (ExampleMod.Instance != null)
-            {
-                ExampleMod.Instance.Info(
-                    "[Scene Detector] " + message
-                );
-            }
+                ExampleMod.Instance.Info("[Scene Detector] " + message);
         }
 
         private static void LogError(string message)
         {
             if (ExampleMod.Instance != null)
-            {
-                ExampleMod.Instance.Error(
-                    "[Scene Detector] " + message
-                );
-            }
+                ExampleMod.Instance.Error("[Scene Detector] " + message);
         }
     }
 }
