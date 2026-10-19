@@ -33,14 +33,22 @@ namespace ULTRADROID.Sound
             infoLogger = info;
             errorLogger = error;
 
-            LogInfo("Logger connected. BUILD TEST 006");
+            LogInfo("Logger connected. BUILD TEST 007");
         }
 
         internal static void LogInfo(string message)
         {
             if (infoLogger != null)
             {
-                infoLogger(message);
+                try
+                {
+                    infoLogger(message);
+                }
+                catch
+                {
+                    Debug.Log(message);
+                }
+
                 return;
             }
 
@@ -51,7 +59,15 @@ namespace ULTRADROID.Sound
         {
             if (errorLogger != null)
             {
-                errorLogger(message);
+                try
+                {
+                    errorLogger(message);
+                }
+                catch
+                {
+                    Debug.LogError(message);
+                }
+
                 return;
             }
 
@@ -92,7 +108,7 @@ namespace ULTRADROID.Sound
                     );
                 }
 
-                LogInfo("BUILD TEST 006 - NEW API LOADED");
+                LogInfo("BUILD TEST 007 - DIAGNOSTIC RUNTIME CREATED");
             }
             catch (Exception e)
             {
@@ -107,7 +123,7 @@ namespace ULTRADROID.Sound
             SoundOptions options,
             Action<SoundHandle, string> callback)
         {
-            LogInfo("LoadAndPlay called. BUILD TEST 006");
+            LogInfo("LoadAndPlay called. BUILD TEST 007");
 
             if (runtime == null)
             {
@@ -239,12 +255,17 @@ namespace ULTRADROID.Sound
             }
             catch (Exception e)
             {
-                pending.RemoveAll(item => item.Request == request);
+                pending.RemoveAll(
+                    item => item.Request == request
+                );
 
                 if (request != null)
                     request.Dispose();
 
-                Fail(callback, "Could not start audio loading: " + e);
+                Fail(
+                    callback,
+                    "Could not start audio loading: " + e
+                );
             }
         }
 
@@ -275,16 +296,28 @@ namespace ULTRADROID.Sound
                         load.Callback,
                         "Could not check request status: " + e
                     );
+
                     continue;
                 }
 
                 if (!isDone)
                     continue;
 
-                LogInfo(
-                    "Request completed. Result=" + load.Request.result
-                    + ", Error=" + load.Request.error
-                );
+                string resultDescription;
+
+                try
+                {
+                    resultDescription =
+                        "Result=" + load.Request.result +
+                        ", Error=" + load.Request.error;
+                }
+                catch (Exception e)
+                {
+                    resultDescription =
+                        "Could not read request result: " + e.Message;
+                }
+
+                LogInfo("Request completed. " + resultDescription);
 
                 pending.RemoveAt(i);
 
@@ -317,6 +350,7 @@ namespace ULTRADROID.Sound
                     load.Callback,
                     "Audio loading failed: " + request.error
                 );
+
                 return;
             }
 
@@ -325,7 +359,11 @@ namespace ULTRADROID.Sound
 
             if (clip == null)
             {
-                Fail(load.Callback, "Unity returned a null AudioClip.");
+                Fail(
+                    load.Callback,
+                    "Unity returned a null AudioClip."
+                );
+
                 return;
             }
 
@@ -340,10 +378,14 @@ namespace ULTRADROID.Sound
                     load.Callback,
                     "SoundRuntime was destroyed during loading."
                 );
+
                 return;
             }
 
-            sourceObject.transform.SetParent(runtime.transform, false);
+            sourceObject.transform.SetParent(
+                runtime.transform,
+                false
+            );
 
             AudioSource source =
                 sourceObject.AddComponent<AudioSource>();
@@ -356,6 +398,7 @@ namespace ULTRADROID.Sound
                     load.Callback,
                     "Unity failed to create AudioSource."
                 );
+
                 return;
             }
 
@@ -369,9 +412,9 @@ namespace ULTRADROID.Sound
             SoundHandle handle = new SoundHandle(clip, source);
 
             LogInfo(
-                "Loaded clip. Duration=" + clip.length
-                + " seconds; samples=" + clip.samples
-                + "; frequency=" + clip.frequency
+                "Loaded clip. Duration=" + clip.length +
+                " seconds; samples=" + clip.samples +
+                "; frequency=" + clip.frequency
             );
 
             if (load.Options.PlayOnLoad)
@@ -379,7 +422,8 @@ namespace ULTRADROID.Sound
                 source.Play();
 
                 LogInfo(
-                    "Playback requested. IsPlaying=" + source.isPlaying
+                    "Playback requested. IsPlaying=" +
+                    source.isPlaying
                 );
             }
 
@@ -393,13 +437,39 @@ namespace ULTRADROID.Sound
 
             foreach (PendingLoad load in pending)
             {
-                if (load.Request != null)
-                    load.Request.Dispose();
+                try
+                {
+                    if (load.Request != null)
+                        load.Request.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogError(
+                        "Error disposing pending request: " + e.Message
+                    );
+                }
+
+                try
+                {
+                    if (load.Callback != null)
+                    {
+                        load.Callback(
+                            null,
+                            "SoundRuntime was destroyed before audio loading completed."
+                        );
+                    }
+                }
+                catch (Exception e)
+                {
+                    LogError(
+                        "Pending-load callback threw: " + e
+                    );
+                }
             }
 
             pending.Clear();
 
-            LogInfo("Runtime destroyed.");
+            LogInfo("Runtime destroyed; pending loads cleared.");
         }
 
         private static void Fail(
@@ -422,83 +492,83 @@ namespace ULTRADROID.Sound
         }
     }
 
-
-public sealed class SoundRuntime : MonoBehaviour
-{
-    private int diagnosticFrames;
-    private bool firstUpdateLogged;
-
-    public SoundRuntime(IntPtr ptr) : base(ptr)
+    public sealed class SoundRuntime : MonoBehaviour
     {
-    }
+        private int diagnosticFrames;
+        private bool firstUpdateLogged;
 
-    public void Awake()
-    {
-        SoundAPI.LogInfo(
-            "[ULTRADROID Sound] DIAG: Runtime Awake. " +
-            "Active=" + gameObject.activeInHierarchy
-        );
-    }
-
-    public void OnEnable()
-    {
-        SoundAPI.LogInfo(
-            "[ULTRADROID Sound] DIAG: Runtime OnEnable."
-        );
-    }
-
-    public void Start()
-    {
-        SoundAPI.LogInfo(
-            "[ULTRADROID Sound] DIAG: Runtime Start."
-        );
-    }
-
-    public void Update()
-    {
-        diagnosticFrames++;
-
-        if (!firstUpdateLogged)
+        public SoundRuntime(IntPtr ptr) : base(ptr)
         {
-            firstUpdateLogged = true;
+        }
 
+        public void Awake()
+        {
             SoundAPI.LogInfo(
-                "[ULTRADROID Sound] DIAG: FIRST UPDATE RECEIVED."
+                "[ULTRADROID Sound] DIAG: Runtime Awake. " +
+                "Active=" + gameObject.activeInHierarchy
             );
         }
 
-        if (diagnosticFrames % 30 == 0)
+        public void OnEnable()
         {
             SoundAPI.LogInfo(
-                "[ULTRADROID Sound] DIAG: Update frame count=" +
-                diagnosticFrames
+                "[ULTRADROID Sound] DIAG: Runtime OnEnable."
             );
         }
 
-        SoundAPI.Tick();
-    }
+        public void Start()
+        {
+            SoundAPI.LogInfo(
+                "[ULTRADROID Sound] DIAG: Runtime Start."
+            );
+        }
 
-    public void OnDisable()
-    {
-        SoundAPI.LogError(
-            "[ULTRADROID Sound] DIAG: Runtime OnDisable."
-        );
-    }
+        public void Update()
+        {
+            diagnosticFrames++;
 
-    public void OnDestroy()
-    {
-        SoundAPI.LogError(
-            "[ULTRADROID Sound] DIAG: Runtime OnDestroy. " +
-            "Frames observed=" + diagnosticFrames
-        );
+            if (!firstUpdateLogged)
+            {
+                firstUpdateLogged = true;
 
-        SoundAPI.RuntimeDestroyed();
-    }
+                SoundAPI.LogInfo(
+                    "[ULTRADROID Sound] DIAG: FIRST UPDATE RECEIVED."
+                );
+            }
 
-    public void OnApplicationQuit()
-    {
-        SoundAPI.LogInfo(
-            "[ULTRADROID Sound] DIAG: Application quitting."
-        );
+            if (diagnosticFrames % 30 == 0)
+            {
+                SoundAPI.LogInfo(
+                    "[ULTRADROID Sound] DIAG: Update frame count=" +
+                    diagnosticFrames
+                );
+            }
+
+            SoundAPI.Tick();
+        }
+
+        public void OnDisable()
+        {
+            SoundAPI.LogError(
+                "[ULTRADROID Sound] DIAG: Runtime OnDisable."
+            );
+        }
+
+        public void OnDestroy()
+        {
+            SoundAPI.LogError(
+                "[ULTRADROID Sound] DIAG: Runtime OnDestroy. " +
+                "Frames observed=" + diagnosticFrames
+            );
+
+            SoundAPI.RuntimeDestroyed();
+        }
+
+        public void OnApplicationQuit()
+        {
+            SoundAPI.LogInfo(
+                "[ULTRADROID Sound] DIAG: Application quitting."
+            );
+        }
     }
 }
