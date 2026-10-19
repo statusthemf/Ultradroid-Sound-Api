@@ -1,3 +1,4 @@
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -29,7 +30,6 @@ namespace ULTRADROID.Sound
         private static bool shuttingDown;
         private static bool creatingRuntime;
 
-        private static Action<string> infoLogger;
         private static Action<string> errorLogger;
 
         private static readonly Dictionary<string, AudioClip> cache =
@@ -82,27 +82,13 @@ namespace ULTRADROID.Sound
             get { return sources.Count; }
         }
 
+        // Kept for compatibility with existing callers.
+        // Routine informational logging is intentionally disabled.
         public static void SetLogger(
             Action<string> info,
             Action<string> error)
         {
-            infoLogger = info;
             errorLogger = error;
-        }
-
-        internal static void LogInfo(string message)
-        {
-            try
-            {
-                if (infoLogger != null)
-                    infoLogger(message);
-                else
-                    Debug.Log(message);
-            }
-            catch
-            {
-                Debug.Log(message);
-            }
         }
 
         internal static void LogError(string message)
@@ -112,11 +98,11 @@ namespace ULTRADROID.Sound
                 if (errorLogger != null)
                     errorLogger(message);
                 else
-                    Debug.LogError(message);
+                    Debug.LogError("[ULTRADROID Sound] " + message);
             }
             catch
             {
-                Debug.LogError(message);
+                Debug.LogError("[ULTRADROID Sound] " + message);
             }
         }
 
@@ -124,26 +110,31 @@ namespace ULTRADROID.Sound
         {
             if (shuttingDown)
             {
-                LogError("Sound API has been shut down.");
+                LogError("The Sound API has been shut down.");
                 return;
             }
 
-            if (!typeRegistered)
+            try
             {
-                ClassInjector.RegisterTypeInIl2Cpp<SoundRuntime>();
-                typeRegistered = true;
-                LogInfo("SoundRuntime type registered.");
+                if (!typeRegistered)
+                {
+                    ClassInjector.RegisterTypeInIl2Cpp<SoundRuntime>();
+                    typeRegistered = true;
+                }
+
+                initialized = true;
+
+                if (!IsRuntimeAvailable)
+                    CreateRuntime();
+
+                if (!IsRuntimeAvailable)
+                    LogError("The sound runtime is unavailable.");
             }
-
-            initialized = true;
-
-            if (!IsRuntimeAvailable)
-                CreateRuntime();
-
-            if (IsRuntimeAvailable)
-                LogInfo("Sound API initialized successfully.");
-            else
-                LogError("Sound runtime is unavailable.");
+            catch (Exception e)
+            {
+                initialized = false;
+                LogError("Initialization failed: " + e.Message);
+            }
         }
 
         private static void CreateRuntime()
@@ -165,16 +156,13 @@ namespace ULTRADROID.Sound
                 {
                     UnityEngine.Object.Destroy(obj);
                     obj = null;
-                    LogError("Could not attach SoundRuntime.");
-                    return;
+                    LogError("Could not attach the sound runtime.");
                 }
-
-                LogInfo("SoundRuntime created.");
             }
             catch (Exception e)
             {
                 runtime = null;
-                LogError("Could not create SoundRuntime: " + e);
+                LogError("Could not create the sound runtime: " + e.Message);
 
                 if (obj != null)
                     UnityEngine.Object.Destroy(obj);
@@ -216,10 +204,19 @@ namespace ULTRADROID.Sound
                 AudioClip cachedClip;
 
                 if (cache.TryGetValue(fullPath, out cachedClip) &&
-                    cachedClip != null)
+                    IsUsableClip(cachedClip))
                 {
                     CompleteCallback(callback, cachedClip, null);
                     return;
+                }
+
+                // Remove a stale or invalid cache entry.
+                if (cache.TryGetValue(fullPath, out cachedClip))
+                {
+                    cache.Remove(fullPath);
+
+                    if (cachedClip != null)
+                        UnityEngine.Object.Destroy(cachedClip);
                 }
 
                 if (!File.Exists(fullPath))
@@ -233,12 +230,12 @@ namespace ULTRADROID.Sound
 
                 List<Action<AudioClip, string>> callbacks;
 
+                // Coalesce requests for the same file.
                 if (loadCallbacks.TryGetValue(fullPath, out callbacks))
                 {
                     if (callback != null)
                         callbacks.Add(callback);
 
-                    LogInfo("Audio is already loading: " + fullPath);
                     return;
                 }
 
@@ -249,7 +246,7 @@ namespace ULTRADROID.Sound
                 {
                     CompleteCallback(
                         callback, null,
-                        "SoundRuntime is unavailable."
+                        "The sound runtime is unavailable."
                     );
                     return;
                 }
@@ -267,7 +264,7 @@ namespace ULTRADROID.Sound
             {
                 CompleteCallback(
                     callback, null,
-                    "Could not load audio: " + e
+                    "Could not load audio: " + e.Message
                 );
             }
         }
@@ -324,16 +321,15 @@ namespace ULTRADROID.Sound
                 if (operation == null)
                 {
                     pending.Remove(item);
-                    request.Dispose();
+
+                    try { request.Dispose(); }
+                    catch { }
 
                     FinishLoading(
                         path, null,
-                        "Unity returned no async operation."
+                        "Unity could not start the audio request."
                     );
-                    return;
                 }
-
-                LogInfo("Started loading audio: " + path);
             }
             catch (Exception e)
             {
@@ -345,7 +341,7 @@ namespace ULTRADROID.Sound
 
                 FinishLoading(
                     path, null,
-                    "Could not start audio request: " + e
+                    "Could not start audio request: " + e.Message
                 );
             }
         }
@@ -355,7 +351,7 @@ namespace ULTRADROID.Sound
             if (shuttingDown)
                 return;
 
-            // Complete audio loads.
+            // Complete pending audio loads.
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingLoad item = pending[i];
@@ -365,9 +361,10 @@ namespace ULTRADROID.Sound
                     if (item.Request == null)
                     {
                         pending.RemoveAt(i);
+
                         FinishLoading(
                             item.Path, null,
-                            "Audio request became null."
+                            "The audio request became unavailable."
                         );
                         continue;
                     }
@@ -391,8 +388,8 @@ namespace ULTRADROID.Sound
                             item.Request
                         );
 
-                        if (clip == null)
-                            error = "Unity returned no AudioClip.";
+                        if (!IsUsableClip(clip))
+                            error = "The audio file could not be decoded or is empty.";
                     }
 
                     try { item.Request.Dispose(); }
@@ -413,16 +410,15 @@ namespace ULTRADROID.Sound
 
                     FinishLoading(
                         item.Path, null,
-                        "Error processing audio request: " + e
+                        "Error processing audio: " + e.Message
                     );
                 }
             }
 
-            // Clean up completed playback sources.
+            // Clean up stopped and naturally completed playback.
             for (int i = sources.Count - 1; i >= 0; i--)
             {
                 ActivePlayback playback = sources[i];
-
                 bool remove = false;
 
                 try
@@ -463,9 +459,38 @@ namespace ULTRADROID.Sound
                 }
                 catch (Exception e)
                 {
-                    LogError("Audio cleanup failed: " + e);
+                    LogError("Audio cleanup failed: " + e.Message);
+
+                    try
+                    {
+                        if (playback != null && playback.Source != null)
+                        {
+                            GameObject obj = playback.Source.gameObject;
+                            playback.Source.Stop();
+
+                            if (obj != null)
+                                UnityEngine.Object.Destroy(obj);
+                        }
+                    }
+                    catch { }
+
                     sources.RemoveAt(i);
                 }
+            }
+        }
+
+        private static bool IsUsableClip(AudioClip clip)
+        {
+            try
+            {
+                return clip != null &&
+                       clip.samples > 0 &&
+                       clip.length > 0f &&
+                       clip.channels > 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 
@@ -478,13 +503,16 @@ namespace ULTRADROID.Sound
 
             if (loadCallbacks.TryGetValue(path, out callbacks))
             {
-                // Remove before invoking callbacks. A callback may call Load.
+                // Remove before callbacks so callbacks can call Load again.
                 loadCallbacks.Remove(path);
             }
             else
             {
                 callbacks = new List<Action<AudioClip, string>>();
             }
+
+            if (string.IsNullOrEmpty(error) && !IsUsableClip(clip))
+                error = "The audio file produced an invalid or empty clip.";
 
             if (!string.IsNullOrEmpty(error) || clip == null)
             {
@@ -504,11 +532,6 @@ namespace ULTRADROID.Sound
 
             cache[path] = clip;
 
-            LogInfo(
-                "Cached audio: " + path +
-                ", length=" + clip.length
-            );
-
             for (int i = 0; i < callbacks.Count; i++)
                 CompleteCallback(callbacks[i], clip, null);
         }
@@ -527,7 +550,7 @@ namespace ULTRADROID.Sound
             }
             catch (Exception e)
             {
-                LogError("Audio callback failed: " + e);
+                LogError("Audio callback failed: " + e.Message);
             }
         }
 
@@ -555,16 +578,17 @@ namespace ULTRADROID.Sound
             }
             catch (Exception e)
             {
-                LogError("Invalid audio path: " + e);
+                LogError("Invalid audio path: " + e.Message);
                 return null;
             }
 
             AudioClip clip;
 
-            if (!cache.TryGetValue(fullPath, out clip) || clip == null)
+            if (!cache.TryGetValue(fullPath, out clip) ||
+                !IsUsableClip(clip))
             {
                 LogError(
-                    "Audio is not cached. Call SoundAPI.Load() first: " +
+                    "Audio is not cached or is invalid. Call SoundAPI.Load() first: " +
                     fullPath
                 );
                 return null;
@@ -575,7 +599,7 @@ namespace ULTRADROID.Sound
 
             if (!IsRuntimeAvailable)
             {
-                LogError("SoundRuntime is unavailable.");
+                LogError("The sound runtime is unavailable.");
                 return null;
             }
 
@@ -583,6 +607,7 @@ namespace ULTRADROID.Sound
                 options = new SoundOptions();
 
             GameObject obj = null;
+            ActivePlayback playback = null;
 
             try
             {
@@ -600,7 +625,7 @@ namespace ULTRADROID.Sound
 
                 SoundHandle handle = new SoundHandle(clip, source);
 
-                ActivePlayback playback = new ActivePlayback
+                playback = new ActivePlayback
                 {
                     Path = fullPath,
                     Clip = clip,
@@ -617,10 +642,13 @@ namespace ULTRADROID.Sound
             }
             catch (Exception e)
             {
+                if (playback != null)
+                    sources.Remove(playback);
+
                 if (obj != null)
                     UnityEngine.Object.Destroy(obj);
 
-                LogError("Could not start audio playback: " + e);
+                LogError("Could not start audio playback: " + e.Message);
                 return null;
             }
         }
@@ -632,9 +660,14 @@ namespace ULTRADROID.Sound
         {
             Load(path, (clip, error) =>
             {
-                if (!string.IsNullOrEmpty(error) || clip == null)
+                if (!string.IsNullOrEmpty(error) || !IsUsableClip(clip))
                 {
-                    CompleteSoundCallback(callback, null, error);
+                    CompleteSoundCallback(
+                        callback, null,
+                        string.IsNullOrEmpty(error)
+                            ? "The loaded audio clip is invalid."
+                            : error
+                    );
                     return;
                 }
 
@@ -644,7 +677,7 @@ namespace ULTRADROID.Sound
                 {
                     CompleteSoundCallback(
                         callback, null,
-                        "Audio was loaded, but playback could not start."
+                        "Audio loaded, but playback could not start."
                     );
                     return;
                 }
@@ -667,7 +700,7 @@ namespace ULTRADROID.Sound
             }
             catch (Exception e)
             {
-                LogError("Sound callback failed: " + e);
+                LogError("Sound callback failed: " + e.Message);
             }
         }
 
@@ -679,7 +712,7 @@ namespace ULTRADROID.Sound
 
                 return cache.TryGetValue(
                     NormalizePath(path), out clip
-                ) && clip != null;
+                ) && IsUsableClip(clip);
             }
             catch
             {
@@ -687,8 +720,7 @@ namespace ULTRADROID.Sound
             }
         }
 
-        // Refuses to unload a clip while one of its sounds is active.
-        // Stop active handles first, then call Unload again.
+        // Active sounds must be stopped before their clip can be unloaded.
         public static void Unload(string path)
         {
             try
@@ -704,12 +736,16 @@ namespace ULTRADROID.Sound
                     ActivePlayback playback = sources[i];
 
                     if (playback != null &&
-                        playback.Path == fullPath &&
+                        string.Equals(
+                            playback.Path,
+                            fullPath,
+                            StringComparison.OrdinalIgnoreCase
+                        ) &&
                         playback.Source != null)
                     {
-                        LogInfo(
-                            "Cannot unload audio while it has an active " +
-                            "playback: " + fullPath
+                        LogError(
+                            "Cannot unload audio while playback is active: " +
+                            fullPath
                         );
                         return;
                     }
@@ -719,12 +755,10 @@ namespace ULTRADROID.Sound
 
                 if (clip != null)
                     UnityEngine.Object.Destroy(clip);
-
-                LogInfo("Unloaded cached audio: " + fullPath);
             }
             catch (Exception e)
             {
-                LogError("Could not unload audio: " + e);
+                LogError("Could not unload audio: " + e.Message);
             }
         }
 
@@ -732,9 +766,8 @@ namespace ULTRADROID.Sound
         {
             runtime = null;
 
-            // The runtime is required to poll pending requests and clean
-            // playback sources. Don't silently pretend it is still active.
-            LogError("SoundRuntime was destroyed.");
+            if (!shuttingDown)
+                LogError("The sound runtime was destroyed unexpectedly.");
         }
 
         internal static void Shutdown()
@@ -760,15 +793,12 @@ namespace ULTRADROID.Sound
 
             pending.Clear();
 
-            // Snapshot callbacks and clear the dictionary before invoking
-            // user code, so callbacks cannot invalidate dictionary iteration.
+            // Clear the callback dictionary before invoking user callbacks.
             List<Action<AudioClip, string>> callbacksToNotify =
                 new List<Action<AudioClip, string>>();
 
             foreach (var entry in loadCallbacks)
-            {
                 callbacksToNotify.AddRange(entry.Value);
-            }
 
             loadCallbacks.Clear();
 
@@ -776,7 +806,7 @@ namespace ULTRADROID.Sound
             {
                 CompleteCallback(
                     callbacksToNotify[i], null,
-                    "Sound API shut down."
+                    "The Sound API was shut down."
                 );
             }
 
@@ -790,9 +820,11 @@ namespace ULTRADROID.Sound
                         sources[i].Source.Stop();
 
                         if (sources[i].Source.gameObject != null)
+                        {
                             UnityEngine.Object.Destroy(
                                 sources[i].Source.gameObject
                             );
+                        }
                     }
                 }
                 catch { }
@@ -808,8 +840,6 @@ namespace ULTRADROID.Sound
 
             cache.Clear();
             runtime = null;
-
-            LogInfo("Sound API shutdown complete.");
         }
     }
 
