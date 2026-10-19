@@ -1,4 +1,4 @@
-
+using UnityEngine.Events;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -96,8 +96,9 @@ namespace ULTRADROID.Sound
 
                 if (!sceneEventRegistered)
                 {
-                    SceneManager.sceneLoaded += OnSceneLoaded;
-                    sceneEventRegistered = true;
+                    SceneManager.sceneLoaded +=
+                         new UnityAction<Scene, 
+                    LoadSceneMode>(OnSceneLoaded);
                 }
 
                 initialized = true;
