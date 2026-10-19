@@ -4,9 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
-using UnityEngine.Events;
 using UnityEngine.Networking;
-using UnityEngine.SceneManagement;
 
 namespace ULTRADROID.Sound
 {
@@ -29,10 +27,7 @@ namespace ULTRADROID.Sound
         private static SoundRuntime runtime;
         private static bool typeRegistered;
         private static bool initialized;
-        private static bool sceneEventRegistered;
         private static bool shuttingDown;
-
-        private static UnityAction<Scene, LoadSceneMode> sceneLoadedHandler;
 
         private static Action<string> infoLogger;
         private static Action<string> errorLogger;
@@ -97,65 +92,26 @@ namespace ULTRADROID.Sound
                 {
                     ClassInjector.RegisterTypeInIl2Cpp<SoundRuntime>();
                     typeRegistered = true;
+
                     LogInfo("SoundRuntime type registered.");
-                }
-
-                if (!sceneEventRegistered)
-                {
-                    sceneLoadedHandler =
-                        new UnityAction<Scene, LoadSceneMode>(
-                            OnSceneLoaded
-                        );
-
-                    SceneManager.sceneLoaded += sceneLoadedHandler;
-                    sceneEventRegistered = true;
                 }
 
                 initialized = true;
 
                 LogInfo(
-                    "BUILD TEST 011: Sound API initialized. " +
-                    "Waiting for a valid scene."
+                    "BUILD TEST 012: Initializing Sound API."
                 );
 
-                Scene activeScene = SceneManager.GetActiveScene();
+                CreateRuntime();
 
-                if (activeScene.IsValid() && activeScene.isLoaded)
-                {
-                    LogInfo(
-                        "Active scene found: " + activeScene.name
-                    );
-
-                    CreateRuntime();
-                }
-            }
-            catch (Exception e)
-            {
-                LogError("Sound API initialization failed: " + e);
-            }
-        }
-
-        private static void OnSceneLoaded(
-            Scene scene,
-            LoadSceneMode mode)
-        {
-            if (shuttingDown)
-                return;
-
-            try
-            {
                 LogInfo(
-                    "Scene loaded: " + scene.name +
-                    ", mode=" + mode +
-                    ", loaded=" + scene.isLoaded
+                    "BUILD TEST 012: Initialization finished."
                 );
-
-                if (scene.IsValid() && scene.isLoaded)
-                    CreateRuntime();
             }
             catch (Exception e)
             {
-                LogError("Scene-loaded handler failed: " + e);
+                initialized = false;
+                LogError("Sound API initialization failed: " + e);
             }
         }
 
@@ -193,25 +149,24 @@ namespace ULTRADROID.Sound
 
                 if (runtime == null)
                 {
-                    LogError("AddComponent returned a null SoundRuntime.");
+                    LogError("Could not attach SoundRuntime.");
                     UnityEngine.Object.Destroy(obj);
                     return;
                 }
 
                 LogInfo(
-                    "BUILD TEST 011: Runtime created. " +
-                    "Object=" + obj.name +
-                    ", active=" + obj.activeInHierarchy +
-                    ", scene=" + obj.scene.name
+                    "BUILD TEST 012: Runtime created. " +
+                    "Active=" + obj.activeInHierarchy +
+                    ", Scene=" + obj.scene.name
                 );
 
                 StartQueuedLoads();
             }
             catch (Exception e)
             {
-                LogError("Could not create SoundRuntime: " + e);
-
                 runtime = null;
+
+                LogError("Could not create SoundRuntime: " + e);
 
                 if (obj != null)
                 {
@@ -231,13 +186,13 @@ namespace ULTRADROID.Sound
             SoundOptions options,
             Action<SoundHandle, string> callback)
         {
-            LogInfo("LoadAndPlay called. BUILD TEST 011");
+            LogInfo("LoadAndPlay called. BUILD TEST 012");
 
             if (!initialized)
             {
                 FailCallback(
                     callback,
-                    "SoundAPI.Initialize() must be called first."
+                    "Call SoundAPI.Initialize() before loading audio."
                 );
                 return;
             }
@@ -285,7 +240,7 @@ namespace ULTRADROID.Sound
                     StartQueuedLoads();
                 else
                     LogInfo(
-                        "Runtime not ready. Waiting for scene load."
+                        "Runtime unavailable. Audio remains queued."
                     );
             }
             catch (Exception e)
@@ -552,7 +507,7 @@ namespace ULTRADROID.Sound
                 source.playOnAwake = false;
                 source.spatialBlend = 0f;
 
-                // Keep this argument order aligned with SoundHandle.cs.
+                // Match this constructor to SoundHandle.cs.
                 SoundHandle handle = new SoundHandle(clip, source);
 
                 if (item.Options.PlayOnLoad)
@@ -656,24 +611,6 @@ namespace ULTRADROID.Sound
             shuttingDown = true;
             initialized = false;
 
-            if (sceneEventRegistered && sceneLoadedHandler != null)
-            {
-                try
-                {
-                    SceneManager.sceneLoaded -= sceneLoadedHandler;
-                }
-                catch (Exception e)
-                {
-                    LogError(
-                        "Could not unregister scene handler: " +
-                        e.Message
-                    );
-                }
-            }
-
-            sceneEventRegistered = false;
-            sceneLoadedHandler = null;
-
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingLoad item = pending[i];
@@ -690,10 +627,7 @@ namespace ULTRADROID.Sound
                 {
                 }
 
-                FailCallback(
-                    item.Callback,
-                    "Sound API shut down."
-                );
+                FailCallback(item.Callback, "Sound API shut down.");
             }
 
             pending.Clear();
