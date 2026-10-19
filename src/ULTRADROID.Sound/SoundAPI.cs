@@ -422,38 +422,87 @@ namespace ULTRADROID.Sound
         }
     }
 
-    public sealed class SoundRuntime : MonoBehaviour
+
+public sealed class SoundRuntime : MonoBehaviour
+{
+    private int diagnosticFrames;
+    private bool firstUpdateLogged;
+
+    public SoundRuntime(IntPtr ptr) : base(ptr)
     {
-        private int diagnosticFrames;
-        private bool updateDiagnosticLogged;
+    }
 
-        public SoundRuntime(IntPtr ptr) : base(ptr)
+    public void Awake()
+    {
+        SoundAPI.LogInfo(
+            "[ULTRADROID Sound] DIAG: Runtime Awake. " +
+            "Active=" + gameObject.activeInHierarchy
+        );
+    }
+
+    public void OnEnable()
+    {
+        SoundAPI.LogInfo(
+            "[ULTRADROID Sound] DIAG: Runtime OnEnable."
+        );
+    }
+
+    public void Start()
+    {
+        SoundAPI.LogInfo(
+            "[ULTRADROID Sound] DIAG: Runtime Start."
+        );
+    }
+
+    public void Update()
+    {
+        diagnosticFrames++;
+
+        if (!firstUpdateLogged)
         {
-        }
+            firstUpdateLogged = true;
 
-        public void Update()
-        {
-            diagnosticFrames++;
-
-            if (!updateDiagnosticLogged && diagnosticFrames >= 120)
-            {
-                updateDiagnosticLogged = true;
-
-                SoundAPI.LogInfo(
-                    "BUILD TEST 006 - UPDATE RUNNING"
-                );
-            }
-
-            SoundAPI.Tick();
-        }
-
-        public void OnDestroy()
-        {
-            SoundAPI.LogError(
-                "DIAGNOSTIC: SoundRuntime.OnDestroy was called."
+            SoundAPI.LogInfo(
+                "[ULTRADROID Sound] DIAG: FIRST UPDATE RECEIVED."
             );
+        }
 
-            SoundAPI.RuntimeDestroyed();
+        if (diagnosticFrames % 30 == 0)
+        {
+            SoundAPI.LogInfo(
+                "[ULTRADROID Sound] DIAG: Update frame count=" +
+                diagnosticFrames
+            );
+        }
+
+        SoundAPI.Tick();
+    }
+
+    public void OnDisable()
+    {
+        SoundAPI.LogError(
+            "[ULTRADROID Sound] DIAG: Runtime OnDisable."
+        );
+    }
+
+    public void OnDestroy()
+    {
+        SoundAPI.LogError(
+            "[ULTRADROID Sound] DIAG: Runtime OnDestroy. " +
+            "Frames observed=" + diagnosticFrames
+        );
+
+        SoundAPI.RuntimeDestroyed();
+    }
+
+    public void OnApplicationQuit()
+    {
+        SoundAPI.LogInfo(
+            "[ULTRADROID Sound] DIAG: Application quitting."
+        );
+    }
+}
+
         }
     }
 }
