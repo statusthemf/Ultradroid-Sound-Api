@@ -13,7 +13,7 @@ namespace ULTRADROID.Sound.ExampleMod
     [BepInPlugin(
         "com.statusthemf.ultradroid.soundtest",
         "ULTRADROID Sound Test",
-        "1.0.6"
+        "1.0.7"
     )]
     public sealed class ExampleMod : BasePlugin
     {
@@ -37,7 +37,7 @@ namespace ULTRADROID.Sound.ExampleMod
         {
             Instance = this;
 
-            Info("ULTRADROID Sound Test 1.0.6 loaded.");
+            Info("ULTRADROID Sound Test 1.0.7 loaded.");
 
             try
             {
@@ -54,12 +54,12 @@ namespace ULTRADROID.Sound.ExampleMod
 
                 if (runner == null)
                 {
-                    Error("Failed to attach gameplay detector.");
+                    Error("Failed to attach SoundExampleRunner.");
                     return;
                 }
 
                 Info("Gameplay detector attached.");
-                Info("Waiting for gameplay.");
+                Info("Waiting for gameplay scene detection.");
             }
             catch (Exception e)
             {
@@ -110,7 +110,7 @@ namespace ULTRADROID.Sound.ExampleMod
             }
             catch (Exception e)
             {
-                Error("Sound initialization or playback request failed: " + e);
+                Error("Sound initialization failed: " + e);
                 soundRequested = false;
             }
         }
@@ -126,7 +126,7 @@ namespace ULTRADROID.Sound.ExampleMod
 
             if (handle == null)
             {
-                Error("Audio callback returned a null handle.");
+                Error("Audio callback returned a null SoundHandle.");
                 soundRequested = false;
                 return;
             }
@@ -142,9 +142,9 @@ namespace ULTRADROID.Sound.ExampleMod
 
     public sealed class SoundExampleRunner : MonoBehaviour
     {
-        private int candidateSceneHandle = -1;
+        private int candidateSceneHandle = int.MinValue;
         private int stableSceneFrames;
-        private int waitLogCounter;
+        private int diagnosticFrames;
 
         private bool gameplayTriggered;
         private bool exceptionLogged;
@@ -158,54 +158,107 @@ namespace ULTRADROID.Sound.ExampleMod
             if (gameplayTriggered)
                 return;
 
+            diagnosticFrames++;
+
             try
             {
-                Scene scene = SceneManager.GetActiveScene();
+                Scene activeScene = SceneManager.GetActiveScene();
 
-                // IMPORTANT:
-                // Do not call scene.IsValid().
-                // This game's IL2CPP runtime cannot resolve
-                // Scene.IsValidInternal.
+                int activeHandle = activeScene.handle;
+                string activeName = activeScene.name;
 
-                int sceneHandle = scene.handle;
-                string sceneName = scene.name;
+                // Periodically print actual scene data.
+                if (diagnosticFrames % 180 == 1)
+                {
+                    Log(
+                        "SCENE DIAGNOSTIC: ActiveName='" +
+                        (activeName ?? "<null>") +
+                        "', ActiveHandle=" + activeHandle +
+                        ", SceneCount=" + SceneManager.sceneCount
+                    );
 
-                if (sceneHandle < 0 ||
-                    string.IsNullOrEmpty(sceneName))
+                    LogAllScenes();
+                }
+
+                Scene candidateScene = activeScene;
+                string candidateName = activeName;
+                int candidateHandle = activeHandle;
+
+                // If the active scene has no usable name or handle,
+                // inspect scenes reported by SceneManager.
+                if (candidateHandle < 0 ||
+                    string.IsNullOrEmpty(candidateName))
+                {
+                    bool found = false;
+                    int count = SceneManager.sceneCount;
+
+                    for (int i = 0; i < count; i++)
+                    {
+                        Scene scene = SceneManager.GetSceneAt(i);
+
+                        string name = scene.name;
+                        int handle = scene.handle;
+
+                        if (handle < 0 || string.IsNullOrEmpty(name))
+                            continue;
+
+                        if (IsStartupScene(name))
+                            continue;
+
+                        Camera sceneCamera = FindSceneCamera(handle);
+
+                        if (sceneCamera == null)
+                            continue;
+
+                        candidateScene = scene;
+                        candidateName = name;
+                        candidateHandle = handle;
+                        found = true;
+
+                        Log(
+                            "Fallback scene found: '" + name +
+                            "', Handle=" + handle +
+                            ", Camera=" + sceneCamera.name
+                        );
+
+                        break;
+                    }
+
+                    if (!found)
+                    {
+                        ResetCandidate();
+                        return;
+                    }
+                }
+
+                if (IsStartupScene(candidateName))
                 {
                     ResetCandidate();
-                    LogWait("Waiting for an active scene.");
+                    LogWait("Skipping startup scene: " + candidateName);
                     return;
                 }
 
-                if (IsStartupScene(sceneName))
-                {
-                    ResetCandidate();
-                    LogWait("Skipping startup scene: " + sceneName);
-                    return;
-                }
-
-                Camera camera = FindSceneCamera(sceneHandle);
+                Camera camera = FindSceneCamera(candidateHandle);
 
                 if (camera == null)
                 {
                     ResetCandidate();
                     LogWait(
-                        "Waiting for an enabled camera in scene: " +
-                        sceneName
+                        "No enabled camera in scene '" +
+                        candidateName + "'."
                     );
                     return;
                 }
 
-                if (candidateSceneHandle != sceneHandle)
+                if (candidateSceneHandle != candidateHandle)
                 {
-                    candidateSceneHandle = sceneHandle;
+                    candidateSceneHandle = candidateHandle;
                     stableSceneFrames = 0;
 
                     Log(
-                        "Scene candidate: " + sceneName +
-                        ", handle=" + sceneHandle +
-                        ", camera=" + camera.name
+                        "Scene candidate: '" + candidateName +
+                        "', Handle=" + candidateHandle +
+                        ", Camera='" + camera.name + "'."
                     );
                 }
 
@@ -218,26 +271,48 @@ namespace ULTRADROID.Sound.ExampleMod
 
                 Log(
                     "Gameplay confirmed after 10 stable frames: " +
-                    sceneName
+                    candidateName
                 );
 
                 if (ExampleMod.Instance != null)
                 {
-                    ExampleMod.Instance.OnGameplayDetected(sceneName);
+                    ExampleMod.Instance.OnGameplayDetected(candidateName);
                 }
                 else
                 {
-                    LogError("Plugin instance is unavailable.");
+                    LogError("ExampleMod.Instance is null.");
                 }
             }
             catch (Exception e)
             {
-                // Prevent the same exception flooding the log every frame.
                 if (!exceptionLogged)
                 {
                     exceptionLogged = true;
-                    LogError("Gameplay detection failed: " + e);
+                    LogError("Scene detection exception: " + e);
                 }
+            }
+        }
+
+        private void LogAllScenes()
+        {
+            try
+            {
+                int count = SceneManager.sceneCount;
+
+                for (int i = 0; i < count; i++)
+                {
+                    Scene scene = SceneManager.GetSceneAt(i);
+
+                    Log(
+                        "SCENE[" + i + "]: Name='" +
+                        (scene.name ?? "<null>") +
+                        "', Handle=" + scene.handle
+                    );
+                }
+            }
+            catch (Exception e)
+            {
+                LogError("Could not enumerate scenes: " + e.Message);
             }
         }
 
@@ -264,7 +339,7 @@ namespace ULTRADROID.Sound.ExampleMod
             }
             catch (Exception e)
             {
-                LogWarning("Camera.main lookup failed: " + e.Message);
+                LogWarning("Camera.main failed: " + e.Message);
             }
 
             try
@@ -290,29 +365,21 @@ namespace ULTRADROID.Sound.ExampleMod
             Camera camera,
             int sceneHandle)
         {
-            if (camera == null)
-                return false;
-
-            if (!camera.isActiveAndEnabled)
-                return false;
-
-            if (!camera.gameObject.activeInHierarchy)
-                return false;
-
-            return camera.gameObject.scene.handle == sceneHandle;
+            return camera != null &&
+                   camera.isActiveAndEnabled &&
+                   camera.gameObject.activeInHierarchy &&
+                   camera.gameObject.scene.handle == sceneHandle;
         }
 
         private void ResetCandidate()
         {
-            candidateSceneHandle = -1;
+            candidateSceneHandle = int.MinValue;
             stableSceneFrames = 0;
         }
 
         private void LogWait(string message)
         {
-            waitLogCounter++;
-
-            if (waitLogCounter % 180 == 1)
+            if (diagnosticFrames % 180 == 1)
                 Log(message);
         }
 
@@ -331,7 +398,7 @@ namespace ULTRADROID.Sound.ExampleMod
             if (ExampleMod.Instance != null)
             {
                 ExampleMod.Instance.Log.LogWarning(
-                    "[Gameplay Detector] " + message
+                    "[Sound Test] " + message
                 );
             }
         }
